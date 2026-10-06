@@ -110,7 +110,7 @@ These rules are load-bearing. They override convenience, speed, and any implicit
 
 > **DRAFT — not yet locked by USER (proposed 2026-10-06).** Lock, amend or retire in the next session.
 >
-> **(1)** Ship the seeded todo app to a dev Fabric workspace with Entra SSO sign-in working end-to-end. **(2)** Replace the Todo placeholder with one demo domain entity plus one connector to existing Fabric data (semantic model via DAX, or warehouse). **(3)** CI deploy via GitHub Actions with a service principal.
+> **(1)** Ship the seeded todo app to a dev Fabric workspace with Entra SSO sign-in working end-to-end. **(2)** Names-register entity (`Person`, done 2026-10-06) plus one connector to existing Fabric data (semantic model via DAX, or warehouse). **(3)** CI deploy via GitHub Actions with a service principal.
 >
 > **Carry rule:** surface these goals at session start, and reproduce the North Star block near the top of EVERY next-day `.log/plan/*` draft and EVERY `.log/daily/*` summary. Retire the directive when USER says the goals are met (or explicitly asks to retire it).
 
@@ -210,12 +210,12 @@ These rules are load-bearing. They override convenience, speed, and any implicit
 rayfin/
   rayfin.yml          → backend config: auth (fabric SSO + local password), data (mssql), staticHosting
   data/*.ts           → entities (@entity + @role) — single source of truth for DB schema, API and permissions
-  data/schema.ts      → mandatory registry; key = client accessor (client.data.Todo)
+  data/schema.ts      → mandatory registry; key = client accessor (client.data.Person)
   connectors/         → CLI-generated connectors to existing Fabric items (none yet)
   .env (gitignored)   → values for ${VAR} interpolation + ids written by `rayfin up`
 src/
   services/           → ONLY place that talks to Rayfin: rayfinClient.ts (singleton), bootstrap.ts (env → client → auth service),
-                        IAuthService / MockAuthService (local) / RayfinAuthService (Fabric SSO), todos.ts (data wrappers)
+                        IAuthService / MockAuthService (local) / RayfinAuthService (Fabric SSO), people.ts (Person CRUD + search wrappers)
   hooks/AuthContext   → session state mirrored into React
   components/, pages/ → UI only; no Rayfin imports
   __tests__/          → Vitest
@@ -247,7 +247,7 @@ docs/, .log/          → design docs, ADRs, work logs
 **Deployment:**
 - test workspace `EMBEDDING PROD` (F64) ← `main`. No prod workspace yet. Always pass `-w "EMBEDDING PROD"` (or rely on the `rayfin/.deployments.json` registry once the first `up` has run); never fall back to "My Workspace".
 - Deploy via `npx rayfin up` (full) or `npx rayfin up db apply` / `npx rayfin up staticapp deploy` (targeted). Manual portal edits are prohibited.
-- Post-deploy checks: `npx rayfin up status`, open the hosting URL, sign in with Fabric, create / toggle / delete a todo as two different users and confirm isolation.
+- Post-deploy checks: `npx rayfin up status`, open the hosting URL, sign in with Fabric, save / search / rename / delete a name as two different users and confirm each sees only their own rows.
 
 ---
 

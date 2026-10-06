@@ -3,7 +3,7 @@
 Durable entries. Lessons are folded in here while the file is short (split past 400 lines).
 Binding decisions live in `docs/ADR/`; entries here link, never copy.
 
-<!-- next-id: DEC-004 -->
+<!-- next-id: DEC-005 -->
 <!-- next-id: LSN-001 -->
 
 ### DEC-001 · Demo seeded from the Rayfin `todoapp` template · 2026-10-06
@@ -34,3 +34,13 @@ Binding decisions live in `docs/ADR/`; entries here link, never copy.
 **Hits:** 1 · **Confidence:** high (items 1, 3, 4) / medium (item 2: flag necessity inferred from docs, not yet observed on a runner) · **Tags:** ci, github-actions, service-principal, deploy, skill-gap
 **Last-verified:** 2026-10-06 · **Related:** DEC-001
 **Status:** active — first CI run pending (secrets not yet set)
+
+### DEC-004 · `Person` names-register entity replaces the `Todo` placeholder, owner-only · 2026-10-06
+**What:** Single demo entity `Person` (`id` uuid · `name` text 1..200 · `createdAt` date · `user_id` text ≤128) with `@role('authenticated', '*', { policy: claims.sub.eq(item.user_id) })`. Schema key `Person` (`AppSchema`); service boundary `src/services/people.ts` (`listPeople(search?)` = `contains` on `name`, `orderBy name asc`, `.first(200)`; `renamePerson` relies on `update()` returning the row, no `findById` round-trip). Owner-only is the secure default; a shared/team-wide register (widening the policy or dropping it) is a USER fork, not implied by "register".
+**Why / Evidence:** North Star (2); Todo removed before any deploy, so no data loss. Field caps follow CAND-001 (`NVARCHAR(MAX)` risk). Ops verified in `rayfin-data` 1.36.2 typings (`StringFilterInput.contains`, `RowQueryBuilder.first`, `update(): Promise<TSchema[TEntity]>`).
+**Where:** `rayfin/data/Person.ts`, `rayfin/data/schema.ts`, `src/services/people.ts`, `src/__tests__/people.test.ts`. No ADR (entity is the planned placeholder replacement under ADR-0001).
+**Versions:** rayfin-core 1.36.2 · rayfin-data 1.36.2
+**Reversal cost:** low now (nothing deployed); medium after first `up` (rename/drop of `Person` would be destructive)
+**Hits:** 1 · **Confidence:** high · **Tags:** data-model, permissions, owner-only, demo-entity
+**Last-verified:** 2026-10-06 · **Related:** DEC-001, QRK-001, QRK-002
+**Status:** active

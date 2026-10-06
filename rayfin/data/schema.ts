@@ -1,7 +1,7 @@
-import { Todo } from './Todo.js';
+import { Person } from './Person.js';
 
-export type TodoAppSchema = {
-  Todo: Todo;
+export type AppSchema = {
+  Person: Person;
 };
 
-export const schema = [Todo];
+export const schema = [Person];

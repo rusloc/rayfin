@@ -2,55 +2,65 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { useAuth } from '@/hooks/AuthContext';
 import {
-  createTodo,
-  deleteTodo,
-  getTodos,
-  updateTodo,
-  type TodoItem,
-} from '@/services/todos';
+  createPerson,
+  deletePerson,
+  listPeople,
+  renamePerson,
+  type PersonItem,
+} from '@/services/people';
 
 export function HomePage() {
   const { signOut, user } = useAuth();
-  const [todos, setTodos] = useState<TodoItem[]>([]);
-  const [newTodoTitle, setNewTodoTitle] = useState('');
+  const [people, setPeople] = useState<PersonItem[]>([]);
+  const [newName, setNewName] = useState('');
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const fetchTodos = useCallback(async () => {
-    const data = await getTodos();
-    setTodos(data);
-    setLoading(false);
+  const refresh = useCallback(async (term: string) => {
+    try {
+      setPeople(await listPeople(term.trim() || undefined));
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load names.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    void fetchTodos();
-  }, [fetchTodos]);
+    void refresh(search);
+  }, [refresh, search]);
 
-  const handleAddTodo = async (e: React.FormEvent) => {
+  const run = async (action: () => Promise<unknown>) => {
+    try {
+      await action();
+      await refresh(search);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Operation failed.');
+    }
+  };
+
+  const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    const title = newTodoTitle.trim();
-    if (!title) return;
-    setNewTodoTitle('');
-    await createTodo(title);
-    await fetchTodos();
+    const name = newName.trim();
+    if (!name) return;
+    setNewName('');
+    void run(() => createPerson(name));
   };
 
-  const handleToggle = async (id: string, isCompleted: boolean) => {
-    await updateTodo(id, { isCompleted: !isCompleted });
-    await fetchTodos();
+  const handleDelete = (person: PersonItem) => {
+    if (!window.confirm(`Delete "${person.name}"?`)) return;
+    void run(() => deletePerson(person.id));
   };
 
-  const handleDelete = async (id: string) => {
-    await deleteTodo(id);
-    await fetchTodos();
-  };
-
-  const pending = todos.filter((t) => !t.isCompleted);
-  const completed = todos.filter((t) => t.isCompleted);
+  const handleRename = (id: string, name: string) =>
+    run(() => renamePerson(id, name));
 
   return (
     <div className="bg-gray-50 min-h-screen">
       <header className="flex items-center justify-between px-8 py-5 bg-white border-b border-gray-200">
-        <h1 className="text-xl font-bold text-gray-900">Todo App</h1>
+        <h1 className="text-xl font-bold text-gray-900">Names Register</h1>
         <div className="flex items-center gap-4">
           {user?.email && (
             <span className="text-sm text-gray-600" title={user.email}>
@@ -67,72 +77,71 @@ export function HomePage() {
         </div>
       </header>
 
-      <main className="max-w-xl mx-auto px-4 py-10">
-        <form
-          onSubmit={(e) => void handleAddTodo(e)}
-          className="flex gap-3 mb-8"
-        >
+      <main className="max-w-3xl mx-auto px-4 py-10 space-y-6">
+        <form onSubmit={handleSave} className="flex gap-3">
           <input
             type="text"
-            value={newTodoTitle}
-            onChange={(e) => setNewTodoTitle(e.target.value)}
-            placeholder="What needs to be done?"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="Enter a name"
+            maxLength={200}
+            aria-label="New name"
             className="flex-1 rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 placeholder-gray-400 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
           />
           <button
             type="submit"
-            disabled={!newTodoTitle.trim()}
+            disabled={!newName.trim()}
             className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-medium text-white shadow-sm transition-all hover:bg-blue-700 disabled:opacity-40"
           >
-            Add
+            Save
           </button>
         </form>
 
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by name"
+          aria-label="Search by name"
+          className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        />
+
+        {error && (
+          <p role="alert" className="text-sm text-red-600">
+            {error}
+          </p>
+        )}
+
         {loading ? (
           <p className="text-center text-gray-400 text-sm">Loading...</p>
-        ) : todos.length === 0 ? (
-          <div className="text-center py-16">
-            <p className="text-gray-400 text-sm">
-              No todos yet. Add one above!
-            </p>
-          </div>
+        ) : people.length === 0 ? (
+          <p className="text-center py-16 text-gray-400 text-sm">
+            {search.trim() ? 'No names match your search.' : 'No names yet. Add one above.'}
+          </p>
         ) : (
-          <div className="space-y-6">
-            {pending.length > 0 && (
-              <section>
-                <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">
-                  To Do ({pending.length})
-                </h2>
-                <ul className="space-y-2">
-                  {pending.map((todo) => (
-                    <TodoRow
-                      key={todo.id}
-                      todo={todo}
-                      onToggle={handleToggle}
-                      onDelete={handleDelete}
-                    />
-                  ))}
-                </ul>
-              </section>
-            )}
-
-            {completed.length > 0 && (
-              <section>
-                <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">
-                  Completed ({completed.length})
-                </h2>
-                <ul className="space-y-2">
-                  {completed.map((todo) => (
-                    <TodoRow
-                      key={todo.id}
-                      todo={todo}
-                      onToggle={handleToggle}
-                      onDelete={handleDelete}
-                    />
-                  ))}
-                </ul>
-              </section>
-            )}
+          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <tr>
+                  <th className="px-4 py-3">Name</th>
+                  <th className="px-4 py-3">Created</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {people.map((person) => (
+                  <PersonRow
+                    key={person.id}
+                    person={person}
+                    onRename={handleRename}
+                    onDelete={handleDelete}
+                  />
+                ))}
+              </tbody>
+            </table>
+            <p className="px-4 py-2 text-xs text-gray-400 border-t border-gray-100">
+              {people.length} {people.length === 1 ? 'name' : 'names'}
+            </p>
           </div>
         )}
       </main>
@@ -140,68 +149,88 @@ export function HomePage() {
   );
 }
 
-function TodoRow({
-  todo,
-  onToggle,
+function PersonRow({
+  person,
+  onRename,
   onDelete,
 }: {
-  todo: TodoItem;
-  onToggle: (id: string, isCompleted: boolean) => void;
-  onDelete: (id: string) => void;
+  person: PersonItem;
+  onRename: (id: string, name: string) => Promise<void>;
+  onDelete: (person: PersonItem) => void;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(person.name);
+
+  const commit = async () => {
+    const name = draft.trim();
+    if (name && name !== person.name) await onRename(person.id, name);
+    setEditing(false);
+  };
+
+  const cancel = () => {
+    setDraft(person.name);
+    setEditing(false);
+  };
+
   return (
-    <li className="group flex items-center gap-3 rounded-xl bg-white px-4 py-3 shadow-sm border border-gray-100">
-      <button
-        onClick={() => onToggle(todo.id, todo.isCompleted)}
-        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
-          todo.isCompleted
-            ? 'border-blue-500 bg-blue-500 text-white'
-            : 'border-gray-300 hover:border-blue-400'
-        }`}
-        aria-label={todo.isCompleted ? 'Mark incomplete' : 'Mark complete'}
-      >
-        {todo.isCompleted && (
-          <svg
-            className="h-3 w-3"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={3}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M5 13l4 4L19 7"
-            />
-          </svg>
-        )}
-      </button>
-      <span
-        className={`flex-1 text-sm ${
-          todo.isCompleted ? 'text-gray-400 line-through' : 'text-gray-900'
-        }`}
-      >
-        {todo.title}
-      </span>
-      <button
-        onClick={() => onDelete(todo.id)}
-        className="text-gray-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
-        aria-label="Delete todo"
-      >
-        <svg
-          className="h-4 w-4"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M6 18L18 6M6 6l12 12"
+    <tr className="hover:bg-gray-50">
+      <td className="px-4 py-3 text-gray-900">
+        {editing ? (
+          <input
+            autoFocus
+            type="text"
+            value={draft}
+            maxLength={200}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void commit();
+              if (e.key === 'Escape') cancel();
+            }}
+            aria-label={`Rename ${person.name}`}
+            className="w-full rounded-lg border border-blue-400 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
           />
-        </svg>
-      </button>
-    </li>
+        ) : (
+          person.name
+        )}
+      </td>
+      <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
+        {new Date(person.createdAt).toLocaleDateString()}
+      </td>
+      <td className="px-4 py-3 text-right whitespace-nowrap">
+        {editing ? (
+          <>
+            <button
+              onClick={() => void commit()}
+              className="text-blue-600 hover:text-blue-800 text-xs font-medium mr-3"
+            >
+              Save
+            </button>
+            <button
+              onClick={cancel}
+              className="text-gray-400 hover:text-gray-600 text-xs"
+            >
+              Cancel
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={() => setEditing(true)}
+              className="text-blue-600 hover:text-blue-800 text-xs font-medium mr-3"
+              aria-label={`Rename ${person.name}`}
+            >
+              Rename
+            </button>
+            <button
+              onClick={() => onDelete(person)}
+              className="text-gray-400 hover:text-red-600 text-xs"
+              aria-label={`Delete ${person.name}`}
+            >
+              Delete
+            </button>
+          </>
+        )}
+      </td>
+    </tr>
   );
 }

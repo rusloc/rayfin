@@ -1,7 +1,6 @@
-# Basic Todo App
+# Rayfin Demo — Names Register
 
-End-to-end Fabric-authenticated todo CRUD with a Rayfin data model and per-user row-level security.
-A working starter that exercises the full data path — sign in, create todos, toggle them, delete them.
+Fabric-authenticated names register on a Fabric Apps (Rayfin) backend: sign in with Microsoft Entra, save names into the app's SQL database, search, rename and delete them, see the full table. Each user sees only their own rows (row-level `@role` policy). Seeded from the Rayfin `todoapp` template; see `CLAUDE.md` and `docs/` for conventions, ADRs and the CI/CD checklist.
 
 ## Getting started
 
@@ -21,7 +20,7 @@ Open [http://localhost:5173](http://localhost:5173) to view the app.
 ├── rayfin/
 │   ├── rayfin.yml          # Fabric service configuration
 │   └── data/
-│       ├── Todo.ts         # Todo entity with @role-based per-user access
+│       ├── Person.ts       # Person entity with @role-based per-user access
 │       └── schema.ts       # Schema export consumed by the typed client
 ├── src/
 │   ├── main.tsx            # Entry point + Rayfin client bootstrap
@@ -31,14 +30,14 @@ Open [http://localhost:5173](http://localhost:5173) to view the app.
 │   ├── components/
 │   │   └── AuthPage.tsx    # Sign-in UI
 │   ├── pages/
-│   │   └── HomePage.tsx    # Todo list UI
+│   │   └── HomePage.tsx    # Names register UI (save, search, rename, delete, table)
 │   └── services/
 │       ├── IAuthService.ts        # Auth service contract + AuthUser type
 │       ├── MockAuthService.ts     # Local-dev impl (email/password)
 │       ├── RayfinAuthService.ts   # Production impl (Fabric brokered auth)
 │       ├── rayfinClient.ts        # Typed Rayfin client singleton
 │       ├── bootstrap.ts           # Reads env, picks the right auth service
-│       └── todos.ts               # Todo CRUD wrappers (in-memory in local dev)
+│       └── people.ts              # Person CRUD + search wrappers (in-memory in local dev)
 └── package.json
 ```
 

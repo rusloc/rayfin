@@ -19,7 +19,8 @@ Human-readable `idea → decisions → features` read-through of the ADR ledger 
 | F7 | Branch model | `main` only · `dev`/`prod` ← `feat/*` | `main` only for demo |
 | F8 | Second subagent for front-end lane | add · skills-only | skills-only |
 | F9 | Patch `.claude/skills/fabric-apps-rayfin/references/*` for 1.36.2 drift (findById, neq, role names, deploy-id files, in-package docs, connector preflight) | patch now · leave, rely on CLAUDE.md note | patch next session |
-| F10 | `Todo.ts` `@text() user_id` → `@text({ max: 128 })` before first deploy (avoids NVARCHAR(MAX) schema-build risk) | apply · skip | apply before first `up` |
+| ~~F10~~ | `user_id` max | **MOOT: Todo removed; `Person` has `max` on every text field** | — |
+| F11 | Names register visibility | owner-only (current) · shared across all signed-in users (drop the `policy`) | owner-only |
 
 ## Ideas (parking lot → see `docs/ADD/ideas/ideas.md`)
 - IDEA-001 Reuse `dataapp` template patterns for an analytics screen once a connector exists.
@@ -33,14 +34,15 @@ Human-readable `idea → decisions → features` read-through of the ADR ledger 
 | D-003 | 2026-10-06 | `rayfin` MCP (version-locked docs) added to `.mcp.json`; fin also has microsoft-learn | — | applied |
 | D-004 | 2026-10-06 | `.log/` is tracked; `.env.local`, `.env.fabric*`, `rayfin/.env*` ignored | — | applied |
 | D-005 | 2026-10-06 | Test workspace = `EMBEDDING PROD` (e7e263e3-1103-4fbb-9098-2ad78bf30664), F64 capacity; dry run verified; USER has full access | — | locked by USER |
+| D-007 | 2026-10-06 | `Person` entity owner-only; Todo entity/service/test removed before first deploy (non-destructive) | fin DEC-004 | applied |
 | D-006 | 2026-10-06 | Sequence: dev loop → first deploy → GitHub CI/CD (service principal) → data-containing app (connector) | — | locked by USER |
 
 ## Features
 | ID | Feature | State | Notes |
 |----|---------|-------|-------|
-| FT-001 | Todo CRUD with per-user row-level security (`@role` owner policy) | implemented (template) | not yet deployed |
+| FT-001 | Todo CRUD (template placeholder) | removed 2026-10-06 | superseded by FT-004 before any deploy |
 | FT-002 | Fabric SSO sign-in (`RayfinAuthService`) + local mock (`MockAuthService`) | implemented (template) | SSO only verifiable once deployed |
 | FT-003 | First deploy to dev workspace | planned | blocked on F1 + `rayfin login` |
-| FT-004 | Demo domain entity replacing Todo | planned | spec first in `docs/ADD/features/` |
+| FT-004 | Names register: `Person` entity (owner-only), save / search / rename / delete / table | implemented 2026-10-06 | not yet deployed; shared-list visibility = fork F11 |
 | FT-005 | Connector to existing Fabric data (semantic model / warehouse) | planned | needs workspace + item id via `connector search` |
 | FT-006 | GitHub Actions deploy (service principal) | planned | needs Entra app reg + tenant setting + repo secrets |

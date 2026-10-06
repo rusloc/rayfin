@@ -4,7 +4,7 @@ import {
   type RayfinRuntimeConfig,
 } from '@microsoft/rayfin-client';
 
-import type { TodoAppSchema } from '../../rayfin/data/schema';
+import type { AppSchema } from '../../rayfin/data/schema';
 
 export interface RayfinClientConfig {
   baseUrl: string;
@@ -17,12 +17,12 @@ export interface RayfinClientConfig {
   runtimeConfig?: RayfinRuntimeConfig;
 }
 
-let client: RayfinClient<TodoAppSchema> | null = null;
+let client: RayfinClient<AppSchema> | null = null;
 let localDev = false;
 
 export async function initRayfinClient(
   config: RayfinClientConfig
-): Promise<RayfinClient<TodoAppSchema>> {
+): Promise<RayfinClient<AppSchema>> {
   if (client) {
     throw new Error('Rayfin client is already initialized.');
   }
@@ -31,7 +31,7 @@ export async function initRayfinClient(
     publishableKey: config.publishableKey,
     ...config.runtimeConfig,
   });
-  client = new RayfinClient<TodoAppSchema>({
+  client = new RayfinClient<AppSchema>({
     // resolved.baseUrl/publishableKey are always set: config.baseUrl/publishableKey
     // are non-optional defaults, so the resolve step can only overlay on top of them.
     baseUrl: resolved.baseUrl!,
@@ -44,7 +44,7 @@ export async function initRayfinClient(
   return client;
 }
 
-export function getRayfinClient(): RayfinClient<TodoAppSchema> {
+export function getRayfinClient(): RayfinClient<AppSchema> {
   if (!client) {
     throw new Error(
       'Rayfin client not initialized. Call bootstrapAuth() first.'
