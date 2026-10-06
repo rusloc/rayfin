@@ -1,0 +1,110 @@
+# Deploy the Fabric App (Rayfin item) to the test workspace with a service principal.
+#
+# Verified against @microsoft/rayfin-cli 1.36.2 (`npx rayfin login --help`, `npx rayfin up --help`).
+# Setup checklist (Entra app, workspace role, tenant setting, secrets): docs/ADD/features/ci-cd-service-principal.md
+#
+# - push to main      -> non-destructive deploy (`rayfin up --yes`; destructive schema ops are refused)
+# - Run workflow (UI) -> same, plus an optional `force` checkbox that adds `--force` (DATA LOSS possible)
+name: Deploy to Fabric
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Allow destructive schema changes that may result in data loss (adds --force). Review the dry-run first.'
+        required: false
+        default: false
+        type: boolean
+
+# One deploy per branch at a time; a newer push cancels the older in-flight run on the same branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  RAYFIN_TELEMETRY_OPTOUT: '1'
+
+jobs:
+  deploy:
+    name: Lint, test, deploy
+    runs-on: ubuntu-latest
+    env:
+      CLIENT_ID: ${{ secrets.CLIENT_ID }}
+      TENANT_ID: ${{ secrets.TENANT_ID }}
+      CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+      # Repository *variable* (Settings > Secrets and variables > Actions > Variables), not a secret:
+      # the workspace name is not sensitive, and a secret would be masked as *** in every rayfin log line.
+      FABRIC_WORKSPACE_NAME: ${{ vars.FABRIC_WORKSPACE_NAME }}
+      FORCE: ${{ inputs.force }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Node 20 satisfies every engine range in the tree (rayfin-cli: 20 | 22 | 24; vite 7: ^20.19 || >=22.12).
+      # setup-node resolves '20' to the latest 20.x, which is >= 20.19.
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      # Project-local CLI (devDependency, lockfile-pinned). Every `rayfin` call below goes through `npx`
+      # so the CLI version always matches @microsoft/rayfin-core / -client in package-lock.json.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      # `rayfin up` defaults to "My Workspace" when no workspace is given. Never let that happen from CI.
+      - name: Guard target workspace
+        run: |
+          if [[ -z "$FABRIC_WORKSPACE_NAME" ]]; then
+            echo "::error::Repository variable FABRIC_WORKSPACE_NAME is not set; refusing to deploy to the default workspace."
+            exit 1
+          fi
+          echo "Target workspace: $FABRIC_WORKSPACE_NAME"
+
+      # Hosted Linux runners have no OS keychain. `--encryption-fallback-enabled` lets the CLI cache the
+      # token in plain text under ~/.rayfin on this ephemeral VM; the file dies with the job.
+      - name: Login to Fabric (service principal)
+        run: |
+          npx rayfin login --service-principal \
+            -t "$TENANT_ID" \
+            -u "$CLIENT_ID" \
+            -p "$CLIENT_SECRET" \
+            --encryption-fallback-enabled
+
+      # Full deploy: create/reuse the item, sync rayfin.yml, apply schema, build (`npm run build:fabric`)
+      # and upload the static site. `--yes` accepts non-destructive prompts only.
+      # Alternative to the display name: `--workspace-id "$FABRIC_WORKSPACE_ID"` (GUID, e.g. from a repo
+      # variable) skips the name lookup and survives a workspace rename.
+      - name: Deploy to Fabric
+        run: |
+          EXTRA_ARGS=()
+          if [[ "$FORCE" == "true" ]]; then
+            echo "::warning::--force requested: destructive schema changes are allowed in this run."
+            EXTRA_ARGS+=(--force)
+          fi
+          npx rayfin up \
+            --workspace "$FABRIC_WORKSPACE_NAME" \
+            --yes \
+            --encryption-fallback-enabled \
+            "${EXTRA_ARGS[@]}"
+
+      # The deployment registry (rayfin/.deployments.json, rayfin/.env) exists only on this runner,
+      # so verify here; a developer machine that never ran `rayfin up` cannot see this deployment.
+      - name: Deployment status
+        run: npx rayfin up status

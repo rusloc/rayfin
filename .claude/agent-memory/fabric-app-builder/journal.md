@@ -1,0 +1,4 @@
+# Journal (append-only; not auto-loaded; rolls quarterly to archive/)
+
+2026-10-06 15:30 — first-session review of todoapp scaffold (code vs skill non-negotiables, official vs local skill diff, typings check for boolean/policy/findById); memory initialized by caller request (entry count above the 3-per-invocation budget is init-only) — DEC-001 DEC-002 QRK-001 QRK-002 QRK-003 CAND-001 CAND-002 — MEMORY.md, domain/decisions.md, domain/quirks.md, domain/conventions.md, domain/candidates.md, reference_workspaces.md
+2026-10-06 15:30 — CI deploy workflow (SP login, gates, force via dispatch only) + manual setup checklist; verified login/up flags on cli 1.36.2, tenant-setting name on Learn; gates pass locally — DEC-003 — .github/workflows/deploy-to-fabric.yml, docs/ADD/features/ci-cd-service-principal.md, domain/decisions.md, MEMORY.md

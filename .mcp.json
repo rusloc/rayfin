@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "supabase": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp?project_ref=howpxpdnjjzdwqrgxkee&features=database,development,functions,debugging,docs"
+    },
+    "vercel": {
+      "type": "http",
+      "url": "https://mcp.vercel.com/yaga/vosk-dev"
+    },
+    "rayfin": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@microsoft/rayfin-mcp",
+        "start"
+      ]
+    }
+  }
+}
