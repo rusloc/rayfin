@@ -22,10 +22,11 @@ import { AgGridReact } from 'ag-grid-react';
 import { AppHeader } from '@/components/AppHeader';
 import { ColumnPicker } from '@/components/ColumnPicker';
 import { JourneyPanel, RouteIcon } from '@/components/JourneyPanel';
+import { ChartIcon, LateChart } from '@/components/LateChart';
+import { LATE_CHART_DATE_COLUMN } from '@/components/lateCounts';
 import { NotePanel } from '@/components/NotePanel';
 import { EMPTY_SEARCH, type ColumnSearchKey, type PoSearch } from '@/components/poSearch';
 import { SearchPanel } from '@/components/SearchPanel';
-import { useAuth } from '@/hooks/AuthContext';
 import {
   DEFAULT_PO_COLUMNS,
   MAX_PO_COLUMNS,
@@ -33,7 +34,7 @@ import {
   PO_COLUMN_BY_NAME,
   columnLabel,
 } from '@/services/poColumns';
-import { listPoNotes, saveMyNote, type PoLineRef, type PoNote } from '@/services/poNotes';
+import { listPoNotes, saveLineNote, type PoLineRef, type PoNote } from '@/services/poNotes';
 import { isLateLine, lateCutoff } from '@/services/poRules';
 import { listPoRows, type PoRow } from '@/services/poView';
 
@@ -74,6 +75,9 @@ function formatDate({ value }: ValueFormatterParams<PoRow>) {
 
 /** Columns the shipment path popup reads; always fetched, whatever is picked. */
 const JOURNEY_COLUMNS = ['_supplier_name', '_client_name', '_pickup_date', '_etd', '_eta', '_arrival_date_actual'];
+
+/** Columns fetched whatever is picked: shipment path popup + late chart. */
+const ALWAYS_COLUMNS = [...JOURNEY_COLUMNS, LATE_CHART_DATE_COLUMN];
 
 const JOURNEY_STEPS: [label: string, column: string][] = [
   ['Pickup date', '_pickup_date'],
@@ -165,8 +169,7 @@ function toColDef(name: string): ColDef<PoRow> {
 
 /** Grid context read by the note cell renderers; refreshed when notes change. */
 interface NotesContext {
-  notesByLine: Map<string, PoNote[]>;
-  userId: string | null;
+  noteByLine: Map<string, PoNote>;
   open: (row: PoRow) => void;
   openJourney: (row: PoRow) => void;
   toggleFlag: (row: PoRow) => void;
@@ -174,25 +177,24 @@ interface NotesContext {
 
 type NoteCellProps = ICellRendererParams<PoRow, unknown, NotesContext>;
 
-function lineNotes({ data, context }: NoteCellProps): PoNote[] {
-  return context.notesByLine.get(String(data?._line_id)) ?? [];
+function lineNote({ data, context }: NoteCellProps): PoNote | null {
+  return context.noteByLine.get(String(data?._line_id)) ?? null;
 }
 
 function FlagCell(params: NoteCellProps) {
   const { data, context } = params;
   if (!data) return null;
-  const notes = lineNotes(params);
-  const mine = notes.find((n) => n.userId === context.userId)?.flagged ?? false;
-  const others = notes.filter((n) => n.flagged && n.userId !== context.userId).length;
+  const note = lineNote(params);
+  const flagged = note?.flagged ?? false;
   return (
     <button
       onClick={() => context.toggleFlag(data)}
-      aria-pressed={mine}
-      aria-label={mine ? 'Remove my flag' : 'Flag this line'}
-      title={others ? `Flagged by ${others} other user(s)` : undefined}
-      className={`text-base leading-none ${mine ? 'text-amber-500' : 'text-gray-300 hover:text-amber-400'}`}
+      aria-pressed={flagged}
+      aria-label={flagged ? 'Remove the flag' : 'Flag this line'}
+      title={flagged && note ? `Flag set by ${note.authorEmail}` : undefined}
+      className={`text-base leading-none ${flagged ? 'text-amber-500' : 'text-gray-300 hover:text-amber-400'}`}
     >
-      ⚑{others > 0 && <sup className="ml-0.5 text-[10px] text-amber-600">{others}</sup>}
+      ⚑
     </button>
   );
 }
@@ -200,14 +202,14 @@ function FlagCell(params: NoteCellProps) {
 function NotesCell(params: NoteCellProps) {
   const { data, context } = params;
   if (!data) return null;
-  const withText = lineNotes(params).filter((n) => n.comment);
+  const comment = lineNote(params)?.comment;
   return (
     <button
       onClick={() => context.open(data)}
-      title={withText[0]?.comment ?? 'Add a note'}
-      className={`text-xs font-medium ${withText.length ? 'text-blue-600 hover:text-blue-800' : 'text-gray-300 hover:text-blue-500'}`}
+      title={comment ?? 'Add a note'}
+      className={`text-xs font-medium ${comment ? 'text-blue-600 hover:text-blue-800' : 'text-gray-300 hover:text-blue-500'}`}
     >
-      {withText.length ? `💬 ${withText.length}` : '+ note'}
+      {comment ? '💬 note' : '+ note'}
     </button>
   );
 }
@@ -241,13 +243,13 @@ function toLineRef(row: PoRow): PoLineRef {
 }
 
 export function PoViewPage() {
-  const { user } = useAuth();
-  const userId = user?.id ?? null;
   const gridRef = useRef<AgGridReact<PoRow>>(null);
   const [columns, setColumns] = useState<string[]>([...DEFAULT_PO_COLUMNS]);
   const [rows, setRows] = useState<PoRow[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notesError, setNotesError] = useState<string | null>(null);
+  const [chartOpen, setChartOpen] = useState(false);
   const [shown, setShown] = useState(0);
   const [filtered, setFiltered] = useState(false);
   const [notes, setNotes] = useState<PoNote[]>([]);
@@ -259,58 +261,51 @@ export function PoViewPage() {
     listPoNotes()
       .then(setNotes)
       .catch((err: unknown) =>
-        setError(err instanceof Error ? `Notes unavailable: ${err.message}` : 'Notes unavailable.')
+        setNotesError(err instanceof Error ? `Notes unavailable: ${err.message}` : 'Notes unavailable.')
       );
   }, []);
 
-  const notesByLine = useMemo(() => {
-    const map = new Map<string, PoNote[]>();
-    for (const n of notes) map.set(n.lineId, [...(map.get(n.lineId) ?? []), n]);
-    return map;
-  }, [notes]);
+  // One shared note per line (the service returns at most one per lineId).
+  const noteByLine = useMemo(() => new Map(notes.map((n) => [n.lineId, n])), [notes]);
 
-  /** Save my note on a line and swap it into local state (null = deleted). */
-  const saveNote = useCallback(
-    async (line: PoLineRef, state: { flagged: boolean; comment: string | null }) => {
-      const saved = await saveMyNote(line, state);
-      setNotes((cur) => {
-        const rest = cur.filter((n) => !(n.lineId === line.lineId && n.userId === userId));
-        return saved ? [...rest, saved] : rest;
-      });
-    },
-    [userId]
-  );
+  /** Save the line's shared note and swap it into local state (null = deleted). */
+  const saveNote = useCallback(async (line: PoLineRef, state: { flagged: boolean; comment: string | null }) => {
+    const saved = await saveLineNote(line, state);
+    setNotes((cur) => {
+      const rest = cur.filter((n) => n.lineId !== line.lineId);
+      return saved ? [...rest, saved] : rest;
+    });
+  }, []);
 
   const toggleFlag = useCallback(
     (row: PoRow) => {
       const line = toLineRef(row);
-      const mine = notesByLine.get(line.lineId)?.find((n) => n.userId === userId);
-      saveNote(line, { flagged: !mine?.flagged, comment: mine?.comment ?? null }).catch((err: unknown) =>
-        setError(err instanceof Error ? err.message : 'Could not save the flag.')
+      const note = noteByLine.get(line.lineId);
+      saveNote(line, { flagged: !note?.flagged, comment: note?.comment ?? null }).catch((err: unknown) =>
+        setNotesError(err instanceof Error ? err.message : 'Could not save the flag.')
       );
     },
-    [notesByLine, userId, saveNote]
+    [noteByLine, saveNote]
   );
 
   // AG Grid reads `context` once (@initial), so keep one object and mutate it,
   // then repaint the note cells.
   const context = useRef<NotesContext>({
-    notesByLine,
-    userId,
+    noteByLine,
     open: setOpenRow,
     openJourney: setJourneyRow,
     toggleFlag,
   }).current;
   useEffect(() => {
-    Object.assign(context, { notesByLine, userId, toggleFlag });
+    Object.assign(context, { noteByLine, toggleFlag });
     gridRef.current?.api?.refreshCells({ columns: ['__flag', '__notes'], force: true });
-  }, [context, notesByLine, userId, toggleFlag]);
+  }, [context, noteByLine, toggleFlag]);
 
   // Re-query on every applied column change; a stale response is dropped.
   useEffect(() => {
     let stale = false;
     setLoading(true);
-    listPoRows(columns, JOURNEY_COLUMNS)
+    listPoRows(columns, ALWAYS_COLUMNS)
       .then((data) => {
         if (stale) return;
         setRows(data);
@@ -338,12 +333,12 @@ export function PoViewPage() {
   // external filter. The callbacks read refs and the grid is told to re-filter
   // whenever the criteria or the notes change.
   const searchRef = useRef(search);
-  const notesRef = useRef(notesByLine);
+  const notesRef = useRef(noteByLine);
   useEffect(() => {
     searchRef.current = search;
-    notesRef.current = notesByLine;
+    notesRef.current = noteByLine;
     gridRef.current?.api?.onFilterChanged();
-  }, [search, notesByLine]);
+  }, [search, noteByLine]);
 
   const isExternalFilterPresent = useCallback(() => {
     const { flag, late, comment } = searchRef.current;
@@ -352,12 +347,12 @@ export function PoViewPage() {
   const doesExternalFilterPass = useCallback((node: IRowNode<PoRow>) => {
     const { flag, late, comment } = searchRef.current;
     if (late !== 'any' && node.data && isLateLine(node.data, lateCutoff()) !== (late === 'yes')) return false;
-    const notes = notesRef.current.get(String(node.data?._line_id)) ?? [];
-    const flagged = notes.some((n) => n.flagged);
+    const note = notesRef.current.get(String(node.data?._line_id));
+    const flagged = note?.flagged ?? false;
     if (flag === 'yes' && !flagged) return false;
     if (flag === 'no' && flagged) return false;
     const term = comment.trim().toLowerCase();
-    return !term || notes.some((n) => n.comment?.toLowerCase().includes(term));
+    return !term || (note?.comment?.toLowerCase().includes(term) ?? false);
   }, []);
 
   // Pale red: ETA more than 7 days ago and no actual arrival (services/poRules).
@@ -396,7 +391,18 @@ export function PoViewPage() {
 
       <main className="flex-1 min-h-0 flex flex-col gap-3 px-8 py-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Purchase order lines</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-gray-900">Purchase order lines</h2>
+            <button
+              onClick={() => setChartOpen(true)}
+              disabled={!rows?.length}
+              aria-label="Late lines chart"
+              title="Late lines by PO creation date"
+              className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-blue-600 disabled:opacity-40"
+            >
+              <ChartIcon />
+            </button>
+          </div>
           <div className="flex items-center gap-4 text-sm text-gray-500">
             {rows !== null && !error && (
               <span>
@@ -423,11 +429,11 @@ export function PoViewPage() {
           </div>
         </div>
 
-        {error && (
-          <p role="alert" className="text-sm text-red-600">
-            {error}
+        {[error, notesError].filter(Boolean).map((message) => (
+          <p key={message} role="alert" className="text-sm text-red-600">
+            {message}
           </p>
-        )}
+        ))}
 
         <div className="flex-1 min-h-0">
           <AgGridReact<PoRow>
@@ -461,13 +467,14 @@ export function PoViewPage() {
         />
       )}
 
+      {chartOpen && rows && <LateChart rows={rows} onClose={() => setChartOpen(false)} />}
+
       {openRow && (
         <NotePanel
           key={String(openRow._line_id)}
           line={toLineRef(openRow)}
           subtitle={openRow._supplier_name == null ? null : String(openRow._supplier_name)}
-          notes={notesByLine.get(String(openRow._line_id)) ?? []}
-          userId={userId}
+          note={noteByLine.get(String(openRow._line_id)) ?? null}
           onSave={saveNote}
           onClose={() => setOpenRow(null)}
         />

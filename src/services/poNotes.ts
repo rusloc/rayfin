@@ -23,6 +23,9 @@ export interface PoLineRef {
 
 const PAGE_SIZE = 500;
 
+/** Upper bound on rows per line: one shared row plus the legacy per-user rows. */
+const LINE_ROWS = 100;
+
 const NOTE_FIELDS = [
   'id',
   'lineId',
@@ -42,7 +45,12 @@ const NOTE_FIELDS = [
  */
 const PO_NOTE_NAMESPACE = '6f1c2a9e-4b7d-4e0a-9c3f-2d8b5a7e1f40';
 
-/** Every user's notes, loaded to completion page by page (joined on `lineId` in the browser). */
+/**
+ * Every line's shared note, loaded to completion page by page and joined on
+ * `lineId` in the browser. At most ONE note per line: the shared row (id =
+ * {@link poNoteId}) when present, otherwise the most recently updated legacy
+ * per-user row (ids were uuidv5(user_id + ':' + lineId) before 2026-10-07).
+ */
 export async function listPoNotes(): Promise<PoNote[]> {
   const client = getRayfinClient();
   const notes: PoNote[] = [];
@@ -55,20 +63,29 @@ export async function listPoNotes(): Promise<PoNote[]> {
     if (!page.hasNextPage || !page.endCursor) break;
     cursor = page.endCursor;
   }
-  return notes;
+
+  const byLine = new Map<string, PoNote[]>();
+  for (const note of notes) byLine.set(note.lineId, [...(byLine.get(note.lineId) ?? []), note]);
+  return Promise.all(
+    [...byLine].map(async ([lineId, group]) => {
+      const sharedId = await poNoteId(lineId);
+      return group.find((n) => n.id === sharedId) ?? latest(group);
+    })
+  );
 }
 
 /**
- * Create, update or delete the signed-in user's note for a PO line.
+ * Create, update or clear THE shared note of a PO line.
  *
- * `patch` merges onto the user's existing note (fetched by its deterministic
- * id): an omitted key keeps the stored value, `comment: null` clears it.
- * When the result has `flagged === false` and no comment, the note is deleted
- * (if it exists) and `null` is returned. Otherwise the note is created
- * (`createdAt` set once) or updated (`updatedAt` refreshed every time) and
- * the saved note is returned.
+ * `patch` merges onto the note currently shown for the line (the shared row,
+ * else the latest legacy row): an omitted key keeps the stored value,
+ * `comment: null` clears it. When the result has `flagged === false` and no
+ * comment, the line's note is deleted and `null` is returned. Otherwise the
+ * shared row is created (`createdAt` set once) or updated, stamped with the
+ * signed-in user as last editor (`authorEmail`, `user_id`, `updatedAt`), and
+ * returned. Legacy per-user rows of the line are deleted after the write.
  */
-export async function saveMyNote(
+export async function saveLineNote(
   line: PoLineRef,
   patch: { flagged?: boolean; comment?: string | null }
 ): Promise<PoNote | null> {
@@ -78,45 +95,57 @@ export async function saveMyNote(
     throw new Error('Sign in to save a note.');
   }
   const { id: userId, email } = session.user;
-  const id = await poNoteId(userId, line.lineId);
-  const existing = await client.data.PoLineNote.findById(id);
+  const id = await poNoteId(line.lineId);
+  const rows = (
+    await client.data.PoLineNote.select([...NOTE_FIELDS])
+      .where({ lineId: { eq: line.lineId } })
+      .first(LINE_ROWS)
+      .execute()
+  ).map(toPoNote);
+  const shared = rows.find((r) => r.id === id) ?? null;
+  const legacy = rows.filter((r) => r.id !== id);
+  const current = shared ?? (legacy.length ? latest(legacy) : null);
 
-  const flagged = patch.flagged ?? existing?.flagged ?? false;
+  const flagged = patch.flagged ?? current?.flagged ?? false;
   const comment = normalizeComment(
-    patch.comment !== undefined ? patch.comment : existing?.comment
+    patch.comment !== undefined ? patch.comment : current?.comment
   );
 
-  if (!flagged && comment === null) {
-    if (existing) await client.data.PoLineNote.delete({ id });
-    return null;
-  }
-
   const now = new Date();
-  if (existing) {
+  let saved: PoNote | null = null;
+  if (!flagged && comment === null) {
+    if (shared) await client.data.PoLineNote.delete({ id });
+  } else if (shared) {
     // `UpdateInput` types optional text as `string | undefined`, but only an
     // explicit `null` clears a stored comment (`undefined` is dropped from the
     // mutation; the runtime sends `null` as GraphQL null).
-    const data = { flagged, comment, authorEmail: email, updatedAt: now };
-    const saved = await client.data.PoLineNote.update(
-      { id },
-      data as Parameters<typeof client.data.PoLineNote.update>[1]
+    const data = { flagged, comment, authorEmail: email, user_id: userId, updatedAt: now };
+    saved = toPoNote(
+      await client.data.PoLineNote.update(
+        { id },
+        data as Parameters<typeof client.data.PoLineNote.update>[1]
+      )
     );
-    return toPoNote(saved);
+  } else {
+    saved = toPoNote(
+      await client.data.PoLineNote.create({
+        id,
+        lineId: line.lineId,
+        poNo: line.poNo,
+        lineNo: line.lineNo ?? undefined,
+        flagged,
+        comment: comment ?? undefined,
+        authorEmail: email,
+        user_id: userId,
+        createdAt: current ? new Date(current.createdAt) : now,
+        updatedAt: now,
+      })
+    );
   }
 
-  const saved = await client.data.PoLineNote.create({
-    id,
-    lineId: line.lineId,
-    poNo: line.poNo,
-    lineNo: line.lineNo ?? undefined,
-    flagged,
-    comment: comment ?? undefined,
-    authorEmail: email,
-    user_id: userId,
-    createdAt: now,
-    updatedAt: now,
-  });
-  return toPoNote(saved);
+  // The shared row is written first so the line is never left without its note.
+  for (const row of legacy) await client.data.PoLineNote.delete({ id: row.id });
+  return saved;
 }
 
 /** The signed-in user's id (what `PoNote.userId` is compared against), or `null` when signed out. */
@@ -125,9 +154,9 @@ export function currentUserId(): string | null {
   return session.isAuthenticated && session.user ? session.user.id : null;
 }
 
-/** Deterministic note id: uuidv5 (SHA-1) of `user_id + ':' + lineId` under {@link PO_NOTE_NAMESPACE}. */
-export async function poNoteId(userId: string, lineId: string): Promise<string> {
-  const name = new TextEncoder().encode(`${userId}:${lineId}`);
+/** Deterministic shared-note id: uuidv5 (SHA-1) of `lineId` under {@link PO_NOTE_NAMESPACE}. */
+export async function poNoteId(lineId: string): Promise<string> {
+  const name = new TextEncoder().encode(lineId);
   const input = new Uint8Array(16 + name.length);
   input.set(uuidToBytes(PO_NOTE_NAMESPACE));
   input.set(name, 16);
@@ -145,6 +174,11 @@ function uuidToBytes(uuid: string): Uint8Array {
   return Uint8Array.from({ length: 16 }, (_, i) =>
     parseInt(hex.slice(i * 2, i * 2 + 2), 16)
   );
+}
+
+/** The most recently updated note of a non-empty group. */
+function latest(group: PoNote[]): PoNote {
+  return group.reduce((a, b) => (Date.parse(b.updatedAt) > Date.parse(a.updatedAt) ? b : a));
 }
 
 function normalizeComment(value: string | null | undefined): string | null {

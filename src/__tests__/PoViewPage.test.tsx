@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
 import { PoViewPage } from '@/pages/PoViewPage';
-import { saveMyNote } from '@/services/poNotes';
+import { saveLineNote } from '@/services/poNotes';
 import { listPoRows } from '@/services/poView';
 
 vi.mock('@/hooks/AuthContext', () => ({
@@ -27,6 +27,8 @@ vi.mock('@/services/poView', () => ({
         _etd: '2026-08-10',
         // Lines 1-5 are long overdue and not arrived; line 6 is overdue but arrived.
         ...(i >= 1 && i <= 6 ? { _eta: '2020-01-01', _arrival_date_actual: i === 6 ? '2020-01-10' : null } : {}),
+        // Late lines by creation day: 01-Sep ×2, 03-Sep ×2, line 4 undated; line 6 (arrived) is not late.
+        ...(i >= 1 && i <= 6 ? { _po_creation_date: [null, '2026-09-01', '2026-09-01', '2026-09-03', null, '2026-09-03', '2026-09-02'][i] } : {}),
       });
     })
   ),
@@ -48,8 +50,8 @@ const note = (over: Record<string, unknown>) => ({
 
 vi.mock('@/services/poNotes', () => ({
   listPoNotes: vi.fn(async () => [note({})]),
-  saveMyNote: vi.fn(async (line: { lineId: string }, state: { flagged: boolean; comment: string | null }) =>
-    note({ id: 'n-mine', lineId: line.lineId, userId: 'u1', authorEmail: 'user@example.com', ...state })
+  saveLineNote: vi.fn(async (line: { lineId: string }, state: { flagged: boolean; comment: string | null }) =>
+    note({ id: `n-${line.lineId}`, lineId: line.lineId, userId: 'u1', authorEmail: 'user@example.com', ...state })
   ),
 }));
 
@@ -141,7 +143,7 @@ test('column picker select / deselect all respect the cap and the search', async
   expect(gridErrors).toEqual([]);
 });
 
-test('notes: others are shown, my flag toggles, my comment saves', async () => {
+test("notes: a colleague's shared note is shown, editable by me, and flags toggle", async () => {
   render(
     <MemoryRouter>
       <PoViewPage />
@@ -149,25 +151,27 @@ test('notes: others are shown, my flag toggles, my comment saves', async () => {
   );
   await screen.findByText('50 of 50 lines');
 
-  // Line 0 carries a colleague's flagged note.
-  fireEvent.click(await screen.findByText('💬 1'));
-  expect(await screen.findByText('Supplier confirmed new ETD')).toBeTruthy();
+  // Line 0 carries a colleague's flagged note; I see it and can rewrite it.
+  fireEvent.click(await screen.findByText('💬 note'));
+  const comment = (await screen.findByPlaceholderText('Add a comment…')) as HTMLTextAreaElement;
+  expect(comment.value).toBe('Supplier confirmed new ETD');
   expect(screen.getByText('colleague@example.com')).toBeTruthy();
 
-  fireEvent.change(screen.getByPlaceholderText('Add a comment…'), { target: { value: '  chase supplier  ' } });
+  fireEvent.change(comment, { target: { value: '  chase supplier  ' } });
   fireEvent.click(screen.getByText('Save'));
   await settle();
-  expect(vi.mocked(saveMyNote)).toHaveBeenLastCalledWith(
+  expect(vi.mocked(saveLineNote)).toHaveBeenLastCalledWith(
     { lineId: 'line-0', poNo: '12504200', lineNo: '1' },
-    { flagged: false, comment: 'chase supplier' }
+    { flagged: true, comment: 'chase supplier' }
   );
   expect(screen.queryByLabelText('PO line notes')).toBeNull();
-  expect(await screen.findByText('💬 2')).toBeTruthy();
+  expect(screen.getAllByText('💬 note')).toHaveLength(1); // still one note on the line, rewritten
+  expect(screen.getByTitle('chase supplier')).toBeTruthy();
 
   const flags = screen.getAllByLabelText('Flag this line');
-  fireEvent.click(flags[1]);
+  fireEvent.click(flags[0]);
   await settle();
-  expect(vi.mocked(saveMyNote)).toHaveBeenLastCalledWith(
+  expect(vi.mocked(saveLineNote)).toHaveBeenLastCalledWith(
     { lineId: 'line-1', poNo: '12504201', lineNo: '1' },
     { flagged: true, comment: null }
   );
@@ -181,7 +185,7 @@ test('search by flag and by comment runs over shared notes', async () => {
     </MemoryRouter>
   );
   await screen.findByText('50 of 50 lines');
-  await screen.findByText('💬 1');
+  await screen.findByText('💬 note');
 
   const runSearch = (setup: () => void) => {
     fireEvent.click(screen.getByLabelText('Search'));
@@ -264,5 +268,42 @@ test('late rule: overdue unarrived lines are pale red and searchable', async () 
 
   fireEvent.click(screen.getByText('Clear filters'));
   expect(await screen.findByText('50 of 50 lines')).toBeTruthy();
+  expect(gridErrors).toEqual([]);
+});
+
+test('late chart: title icon opens a 16:9 popup counting late lines per creation day, own date filter', async () => {
+  render(
+    <MemoryRouter>
+      <PoViewPage />
+    </MemoryRouter>
+  );
+  await screen.findByText('50 of 50 lines');
+  expect(vi.mocked(listPoRows).mock.calls.at(-1)?.[1]).toEqual(expect.arrayContaining(['_po_creation_date']));
+
+  fireEvent.click(screen.getByLabelText('Late lines chart'));
+  const dialog = await screen.findByRole('dialog', { name: 'Late lines chart' });
+  expect(dialog.className).toContain('aspect-video');
+  const chart = within(dialog);
+
+  // Day axis 01..03 Sep, the empty 02-Sep included; count above every bar.
+  expect(chart.getByText('01-Sep-26')).toBeTruthy();
+  expect(chart.getByText('02-Sep-26')).toBeTruthy();
+  expect(chart.getByText('03-Sep-26')).toBeTruthy();
+  expect(chart.getByRole('img', { name: '01-Sep-2026: 2 late lines' })).toBeTruthy();
+  expect(chart.getByRole('img', { name: '03-Sep-2026: 2 late lines' })).toBeTruthy();
+  expect(chart.getAllByRole('img')).toHaveLength(2);
+  expect(dialog.textContent).toContain('4 late lines in range');
+  expect(dialog.textContent).toContain('1 without a creation date');
+
+  // The chart's own From date narrows the chart only.
+  fireEvent.change(chart.getByLabelText('From'), { target: { value: '2026-09-02' } });
+  expect(chart.queryByText('01-Sep-26')).toBeNull();
+  expect(dialog.textContent).toContain('2 late lines in range');
+  fireEvent.click(chart.getByText('All dates'));
+  expect(chart.getByText('01-Sep-26')).toBeTruthy();
+
+  fireEvent.keyDown(document, { key: 'Escape' });
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(screen.getByText('50 of 50 lines')).toBeTruthy();
   expect(gridErrors).toEqual([]);
 });
