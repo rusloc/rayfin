@@ -126,6 +126,19 @@ describe('poView service', () => {
       );
     });
 
+    it('projects extra columns uncapped and rejects unknown extras before querying', async () => {
+      const nonKeys = PO_COLUMNS.map((c) => c.name).filter((n) => !PO_KEY_COLUMNS.includes(n));
+      await listPoRows(nonKeys.slice(0, MAX_PO_COLUMNS), ['_pickup_date', '_eta']);
+      expect(sentDax()).toContain('"_pickup_date"');
+      expect(sentDax().match(/^ {4},"/gm)).toHaveLength(
+        new Set([...nonKeys.slice(0, MAX_PO_COLUMNS), ...PO_KEY_COLUMNS, '_pickup_date', '_eta']).size
+      );
+
+      executeQuery.mockClear();
+      await expect(listPoRows([DBL], ['_nope'])).rejects.toThrow('Unknown PO view column(s): _nope.');
+      expect(executeQuery).not.toHaveBeenCalled();
+    });
+
     it('fills a key column with null when the result lacks it', async () => {
       executeQuery.mockResolvedValue(success([`[${DBL}]`], [[1.5]]));
       const [row] = await listPoRows([DBL]);

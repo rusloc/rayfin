@@ -23,11 +23,20 @@ export const PO_KEY_COLUMNS: readonly string[] = [
  * columns plus {@link PO_KEY_COLUMNS}, as the signed-in user. The caller's
  * list is validated and capped on its own; the key columns are appended
  * afterwards (de-duplicated) and never count against {@link MAX_PO_COLUMNS}.
+ * `extra` names columns a feature always needs (e.g. the shipment path popup);
+ * they are checked against the catalog like any column and are not capped.
  * Throws an `Error` with a user-readable message on invalid input or any
  * query failure.
  */
-export async function listPoRows(columns: readonly string[]): Promise<PoRow[]> {
-  const names = [...new Set([...validateColumns(columns), ...PO_KEY_COLUMNS])];
+export async function listPoRows(
+  columns: readonly string[],
+  extra: readonly string[] = []
+): Promise<PoRow[]> {
+  const unknownExtra = extra.filter((n) => !PO_COLUMN_BY_NAME.has(n));
+  if (unknownExtra.length > 0) {
+    throw new Error(`Unknown PO view column(s): ${unknownExtra.join(', ')}.`);
+  }
+  const names = [...new Set([...validateColumns(columns), ...PO_KEY_COLUMNS, ...extra])];
   const client = getRayfinClient();
 
   let result: Awaited<

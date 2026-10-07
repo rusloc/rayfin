@@ -20,6 +20,7 @@ import { AgGridReact } from 'ag-grid-react';
 
 import { AppHeader } from '@/components/AppHeader';
 import { ColumnPicker } from '@/components/ColumnPicker';
+import { JourneyPanel, RouteIcon } from '@/components/JourneyPanel';
 import { NotePanel } from '@/components/NotePanel';
 import { EMPTY_SEARCH, type ColumnSearchKey, type PoSearch } from '@/components/poSearch';
 import { SearchPanel } from '@/components/SearchPanel';
@@ -57,12 +58,28 @@ const theme = themeQuartz.withParams({
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-/** 'YYYY-MM-DD' → 'dd-Mmm-yyyy', the format the COMS report uses. */
-function formatDate({ value }: ValueFormatterParams<PoRow>) {
-  if (typeof value !== 'string') return '';
+/** 'YYYY-MM-DD' → 'dd-Mmm-yyyy', the format the COMS report uses; null when absent. */
+function formatIsoDate(value: unknown): string | null {
+  if (typeof value !== 'string' || !value) return null;
   const [y, m, d] = value.split('-');
   return `${d}-${MONTHS[Number(m) - 1]}-${y}`;
 }
+
+function formatDate({ value }: ValueFormatterParams<PoRow>) {
+  return formatIsoDate(value) ?? '';
+}
+
+/** Columns the shipment path popup reads; always fetched, whatever is picked. */
+const JOURNEY_COLUMNS = ['_supplier_name', '_client_name', '_pickup_date', '_etd', '_eta', '_arrival_date_actual'];
+
+const JOURNEY_STEPS: [label: string, column: string][] = [
+  ['Pickup date', '_pickup_date'],
+  ['ETD', '_etd'],
+  ['ETA', '_eta'],
+  ['Arrival date (actual)', '_arrival_date_actual'],
+];
+
+const text = (v: unknown) => (v == null || v === '' ? null : String(v));
 
 function formatDecimal({ value }: ValueFormatterParams<PoRow>) {
   return typeof value === 'number' ? value.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '';
@@ -148,6 +165,7 @@ interface NotesContext {
   notesByLine: Map<string, PoNote[]>;
   userId: string | null;
   open: (row: PoRow) => void;
+  openJourney: (row: PoRow) => void;
   toggleFlag: (row: PoRow) => void;
 }
 
@@ -191,7 +209,22 @@ function NotesCell(params: NoteCellProps) {
   );
 }
 
+function JourneyCell({ data, context }: NoteCellProps) {
+  if (!data) return null;
+  return (
+    <button
+      onClick={() => context.openJourney(data)}
+      aria-label="Show shipment path"
+      title="Shipment path"
+      className="flex h-full cursor-pointer items-center text-gray-400 hover:text-blue-600"
+    >
+      <RouteIcon />
+    </button>
+  );
+}
+
 const NOTE_COLUMNS: ColDef<PoRow>[] = [
+  { colId: '__journey', headerName: '', cellRenderer: JourneyCell, width: 48, pinned: 'left', sortable: false, resizable: false },
   { colId: '__flag', headerName: '', cellRenderer: FlagCell, width: 56, pinned: 'left', sortable: false, resizable: false },
   { colId: '__notes', headerName: 'Notes', cellRenderer: NotesCell, width: 90, pinned: 'left', sortable: false },
 ];
@@ -216,6 +249,7 @@ export function PoViewPage() {
   const [filtered, setFiltered] = useState(false);
   const [notes, setNotes] = useState<PoNote[]>([]);
   const [openRow, setOpenRow] = useState<PoRow | null>(null);
+  const [journeyRow, setJourneyRow] = useState<PoRow | null>(null);
   const [search, setSearch] = useState<PoSearch>(EMPTY_SEARCH);
 
   useEffect(() => {
@@ -257,7 +291,13 @@ export function PoViewPage() {
 
   // AG Grid reads `context` once (@initial), so keep one object and mutate it,
   // then repaint the note cells.
-  const context = useRef<NotesContext>({ notesByLine, userId, open: setOpenRow, toggleFlag }).current;
+  const context = useRef<NotesContext>({
+    notesByLine,
+    userId,
+    open: setOpenRow,
+    openJourney: setJourneyRow,
+    toggleFlag,
+  }).current;
   useEffect(() => {
     Object.assign(context, { notesByLine, userId, toggleFlag });
     gridRef.current?.api?.refreshCells({ columns: ['__flag', '__notes'], force: true });
@@ -267,7 +307,7 @@ export function PoViewPage() {
   useEffect(() => {
     let stale = false;
     setLoading(true);
-    listPoRows(columns)
+    listPoRows(columns, JOURNEY_COLUMNS)
       .then((data) => {
         if (stale) return;
         setRows(data);
@@ -399,6 +439,16 @@ export function PoViewPage() {
           />
         </div>
       </main>
+
+      {journeyRow && (
+        <JourneyPanel
+          title={`PO ${text(journeyRow._po_no_ekporef) ?? '—'} · line ${text(journeyRow._line_no) ?? '—'}`}
+          supplier={text(journeyRow._supplier_name)}
+          client={text(journeyRow._client_name)}
+          steps={JOURNEY_STEPS.map(([label, column]) => ({ label, date: formatIsoDate(journeyRow[column]) }))}
+          onClose={() => setJourneyRow(null)}
+        />
+      )}
 
       {openRow && (
         <NotePanel

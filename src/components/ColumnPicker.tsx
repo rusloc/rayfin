@@ -89,8 +89,11 @@ export function ColumnPicker({ all, selected, defaults, max, label, onApply }: C
       </button>
 
       {open && (
-        <div className="absolute right-0 z-20 mt-2 w-80 rounded-xl border border-gray-200 bg-white shadow-lg">
+        <div className="absolute right-0 z-20 mt-2 w-96 rounded-xl border border-gray-200 bg-white shadow-lg">
           <div className="space-y-2 border-b border-gray-100 p-3">
+            <p className={`text-xs ${full ? 'text-amber-600' : 'text-gray-500'}`}>
+              {draft.length} of max {max} selected
+            </p>
             <input
               autoFocus
               value={search}
@@ -98,18 +101,7 @@ export function ColumnPicker({ all, selected, defaults, max, label, onApply }: C
               placeholder="Search columns…"
               className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
-            <div className="flex items-center justify-between text-xs text-gray-500">
-              <span className={full ? 'text-amber-600' : undefined}>
-                {draft.length} of max {max} selected
-              </span>
-              <button
-                onClick={() => setDraft([...defaults])}
-                className="font-medium text-blue-600 hover:text-blue-800"
-              >
-                Reset to default
-              </button>
-            </div>
-            <div className="flex gap-3 text-xs font-medium">
+            <div className="flex items-center gap-3 text-xs font-medium">
               <button
                 onClick={selectAll}
                 disabled={full || allShownPicked}
@@ -123,6 +115,12 @@ export function ColumnPicker({ all, selected, defaults, max, label, onApply }: C
                 className="text-blue-600 hover:text-blue-800 disabled:text-gray-300"
               >
                 {search.trim() ? 'Deselect all shown' : 'Deselect all'}
+              </button>
+              <button
+                onClick={() => setDraft([...defaults])}
+                className="ml-auto text-blue-600 hover:text-blue-800"
+              >
+                Reset to default
               </button>
             </div>
           </div>

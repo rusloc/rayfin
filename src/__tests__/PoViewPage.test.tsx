@@ -22,6 +22,9 @@ vi.mock('@/services/poView', () => ({
         _master_line: 'Master',
         _supplier_name: 'INFLIGHT DIRECT INC.',
         _po_need_by_date: '2026-09-16',
+        _client_name: 'EMIRATES AIRLINE',
+        _pickup_date: '2026-08-01',
+        _etd: '2026-08-10',
       });
     })
   ),
@@ -103,7 +106,7 @@ test('renders rows, searches via the panel, clears and re-queries on column appl
   fireEvent.click(screen.getByLabelText('TEUs'));
   fireEvent.click(screen.getByText('Apply'));
   await settle();
-  expect(vi.mocked(listPoRows)).toHaveBeenLastCalledWith(expect.arrayContaining(['_teus']));
+  expect(vi.mocked(listPoRows).mock.calls.at(-1)?.[0]).toEqual(expect.arrayContaining(['_teus']));
   expect(screen.getByText('Columns · 17')).toBeTruthy();
 
   expect(gridErrors).toEqual([]);
@@ -201,5 +204,34 @@ test('search by flag and by comment runs over shared notes', async () => {
 
   fireEvent.click(screen.getByText('Clear filters'));
   expect(await screen.findByText('50 of 50 lines')).toBeTruthy();
+  expect(gridErrors).toEqual([]);
+});
+
+test('shipment path: first column opens a popup with supplier, milestones and client', async () => {
+  render(
+    <MemoryRouter>
+      <PoViewPage />
+    </MemoryRouter>
+  );
+  await screen.findByText('50 of 50 lines');
+  expect(vi.mocked(listPoRows).mock.calls.at(-1)?.[1]).toEqual(
+    expect.arrayContaining(['_supplier_name', '_client_name', '_pickup_date', '_etd', '_eta', '_arrival_date_actual'])
+  );
+
+  const [icon] = await screen.findAllByLabelText('Show shipment path');
+  const cell = icon.closest('.ag-cell');
+  expect(cell?.getAttribute('col-id')).toBe('__journey');
+  expect(cell?.getAttribute('aria-colindex')).toBe('1'); // first column from the left
+  expect(icon.className).toContain('cursor-pointer');
+
+  fireEvent.click(icon);
+  const dialog = await screen.findByRole('dialog', { name: 'Shipment path' });
+  const lines = dialog.textContent ?? '';
+  expect(lines.indexOf('INFLIGHT DIRECT INC.')).toBeLessThan(lines.indexOf('Pickup date'));
+  expect(lines.indexOf('Arrival date (actual)')).toBeLessThan(lines.indexOf('EMIRATES AIRLINE'));
+  expect(lines).toMatch(/Pickup date01-Aug-2026ETD10-Aug-2026ETANo date yetArrival date \(actual\)No date yet/);
+
+  fireEvent.keyDown(document, { key: 'Escape' });
+  expect(screen.queryByRole('dialog')).toBeNull();
   expect(gridErrors).toEqual([]);
 });
