@@ -69,7 +69,7 @@ export function LateChart({ rows, onClose, onSelectMonth }: LateChartProps) {
   const pct = (v: number) => `${(v / top) * 100}%`;
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-gray-900/30 p-4" onMouseDown={onClose}>
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 p-4" onMouseDown={onClose}>
       <div
         role="dialog"
         aria-modal="true"

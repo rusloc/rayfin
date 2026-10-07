@@ -55,7 +55,12 @@ const theme = themeQuartz.withParams({
   fontFamily: 'inherit',
   fontSize: 13,
   headerFontWeight: 600,
-  headerBackgroundColor: '#f9fafb',
+  // Colours follow the app theme (main.css re-maps these variables per `data-theme`).
+  backgroundColor: 'var(--color-white)',
+  foregroundColor: 'var(--color-gray-900)',
+  borderColor: 'var(--color-gray-200)',
+  headerBackgroundColor: 'var(--color-gray-50)',
+  browserColorScheme: 'inherit',
   borderRadius: 12,
   wrapperBorderRadius: 12,
 });

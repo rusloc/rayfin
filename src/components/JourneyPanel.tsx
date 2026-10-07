@@ -38,7 +38,7 @@ export function JourneyPanel({ title, supplier, client, steps, onClose }: Journe
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-gray-900/30 p-4" onMouseDown={onClose}>
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 p-4" onMouseDown={onClose}>
       <div
         role="dialog"
         aria-modal="true"

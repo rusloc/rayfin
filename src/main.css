@@ -2,7 +2,8 @@
 
 @custom-variant dark (&:is(.dark *));
 
-@theme inline {
+/* Not `inline`: utilities must reference the variables so the themes below can re-map them. */
+@theme {
   --color-blue-50: oklch(0.97 0.014 254.6);
   --color-blue-100: oklch(0.932 0.032 255.6);
   --color-blue-500: oklch(0.623 0.214 259.1);
@@ -43,10 +44,79 @@
   }
 }
 
+/*
+ * Themes (switcher in the header, `data-theme` on <html>). Light is Tailwind's
+ * default palette. The dark themes re-map the gray ramp and white so every
+ * existing `bg-white` / `text-gray-*` / `border-gray-*` flips without touching
+ * components: white = card surface, gray-50 = page, gray-900 = primary text.
+ */
+:root {
+  --po-late-bg: #fef2f2; /* red-50 */
+  --po-late-hover-bg: #fee2e2; /* red-100 */
+}
+
+:root[data-theme='dark'] {
+  --color-white: #18181b;
+  --color-gray-50: #0e0e10;
+  --color-gray-100: #232327;
+  --color-gray-200: #2d2d32;
+  --color-gray-300: #414148;
+  --color-gray-400: #8b8b95;
+  --color-gray-500: #a1a1aa;
+  --color-gray-600: #b6b6be;
+  --color-gray-700: #d4d4d8;
+  --color-gray-800: #e4e4e7;
+  --color-gray-900: #f4f4f5;
+}
+
+:root[data-theme='dark-gray'] {
+  --color-white: #36373c;
+  --color-gray-50: #2b2c30;
+  --color-gray-100: #404147;
+  --color-gray-200: #4a4b52;
+  --color-gray-300: #5c5d65;
+  --color-gray-400: #a0a1aa;
+  --color-gray-500: #b4b5bd;
+  --color-gray-600: #c4c5cc;
+  --color-gray-700: #dadbe0;
+  --color-gray-800: #e8e8ec;
+  --color-gray-900: #f6f6f8;
+}
+
+:root[data-theme='dark'],
+:root[data-theme='dark-gray'] {
+  color-scheme: dark; /* native date pickers, checkboxes, scrollbars */
+  --color-blue-50: color-mix(in oklab, oklch(0.546 0.245 262.9) 22%, transparent);
+  --color-blue-100: color-mix(in oklab, oklch(0.546 0.245 262.9) 32%, transparent);
+  --color-blue-800: oklch(0.8 0.12 256);
+  --color-indigo-50: color-mix(in oklab, oklch(0.511 0.262 276.966) 18%, transparent);
+  --color-indigo-100: color-mix(in oklab, oklch(0.511 0.262 276.966) 22%, transparent);
+  --color-red-600: oklch(0.71 0.19 22);
+  --po-late-bg: color-mix(in oklab, oklch(0.637 0.237 25.331) 18%, transparent);
+  --po-late-hover-bg: color-mix(in oklab, oklch(0.637 0.237 25.331) 28%, transparent);
+}
+
+:root[data-theme='dark'] body,
+:root[data-theme='dark-gray'] body {
+  color: var(--color-gray-900); /* inputs inherit it */
+}
+
+/* `--color-white` is a surface in the dark themes; text on blue / red fills stays white. */
+:root[data-theme='dark'] .text-white,
+:root[data-theme='dark-gray'] .text-white {
+  color: #fff;
+}
+
+/* blue-600 / 700 stay button fills (+ hover); as text they are too dark on dark surfaces (≈3:1), so lift text only. */
+:root[data-theme='dark'] :is(.text-blue-600, .text-blue-700),
+:root[data-theme='dark-gray'] :is(.text-blue-600, .text-blue-700) {
+  color: oklch(0.74 0.15 258);
+}
+
 /* PO view: late lines (ETA > 7 days ago, no actual arrival) in pale red. */
 .ag-row.po-row-late {
-  background-color: #fef2f2; /* red-50 */
+  background-color: var(--po-late-bg);
 }
 .ag-row.po-row-late.ag-row-hover {
-  background-color: #fee2e2; /* red-100 */
+  background-color: var(--po-late-hover-bg);
 }
