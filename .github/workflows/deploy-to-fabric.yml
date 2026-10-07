@@ -37,9 +37,11 @@ jobs:
       CLIENT_ID: ${{ secrets.CLIENT_ID }}
       TENANT_ID: ${{ secrets.TENANT_ID }}
       CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
-      # Repository *variable* (Settings > Secrets and variables > Actions > Variables), not a secret:
-      # the workspace name is not sensitive, and a secret would be masked as *** in every rayfin log line.
-      FABRIC_WORKSPACE_NAME: ${{ vars.FABRIC_WORKSPACE_NAME }}
+      # Target coordinates (not secrets). Repository *variables* FABRIC_WORKSPACE_ID / FABRIC_ITEM_NAME
+      # (Settings > Secrets and variables > Actions > Variables) override the defaults below.
+      # Defaults: test workspace "EMBEDDING PROD" and the portal-created item "COMS" (see CLAUDE.md).
+      FABRIC_WORKSPACE_ID: ${{ vars.FABRIC_WORKSPACE_ID || 'e7e263e3-1103-4fbb-9098-2ad78bf30664' }}
+      FABRIC_ITEM_NAME: ${{ vars.FABRIC_ITEM_NAME || 'COMS' }}
       FORCE: ${{ inputs.force }}
 
     steps:
@@ -71,11 +73,11 @@ jobs:
       # `rayfin up` defaults to "My Workspace" when no workspace is given. Never let that happen from CI.
       - name: Guard target workspace
         run: |
-          if [[ -z "$FABRIC_WORKSPACE_NAME" ]]; then
-            echo "::error::Repository variable FABRIC_WORKSPACE_NAME is not set; refusing to deploy to the default workspace."
+          if [[ -z "$FABRIC_WORKSPACE_ID" || -z "$FABRIC_ITEM_NAME" ]]; then
+            echo "::error::FABRIC_WORKSPACE_ID / FABRIC_ITEM_NAME are empty; refusing to deploy to the default workspace."
             exit 1
           fi
-          echo "Target workspace: $FABRIC_WORKSPACE_NAME"
+          echo "Target workspace id: $FABRIC_WORKSPACE_ID, item: $FABRIC_ITEM_NAME"
 
       # Hosted Linux runners have no OS keychain. `--encryption-fallback-enabled` lets the CLI cache the
       # token in plain text under ~/.rayfin on this ephemeral VM; the file dies with the job.
@@ -89,8 +91,8 @@ jobs:
 
       # Full deploy: create/reuse the item, sync rayfin.yml, apply schema, build (`npm run build:fabric`)
       # and upload the static site. `--yes` accepts non-destructive prompts only.
-      # Alternative to the display name: `--workspace-id "$FABRIC_WORKSPACE_ID"` (GUID, e.g. from a repo
-      # variable) skips the name lookup and survives a workspace rename.
+      # `--workspace-id` skips the name lookup and survives a workspace rename. `--item-name` reuses the
+      # existing item instead of creating one named after the rayfin.yml project id (`--yes` approves reuse).
       - name: Deploy to Fabric
         run: |
           EXTRA_ARGS=()
@@ -99,7 +101,8 @@ jobs:
             EXTRA_ARGS+=(--force)
           fi
           npx rayfin up \
-            --workspace "$FABRIC_WORKSPACE_NAME" \
+            --workspace-id "$FABRIC_WORKSPACE_ID" \
+            --item-name "$FABRIC_ITEM_NAME" \
             --yes \
             --encryption-fallback-enabled \
             "${EXTRA_ARGS[@]}"

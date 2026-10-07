@@ -41,12 +41,17 @@ rayfin.config.json
 *.sln
 *.sw?
 
-# Project work logs: `.log/` is TRACKED. The `*.log` rule above would match the
-# bare directory name, so re-include it explicitly.
-!.log/
-!.log/**
-
 # Framework env emitted by `rayfin env --framework vite` (contains publishable key + ids)
 .env.local
 .env.fabric
 .env.fabric-*
+
+# Private development know-how: kept locally, never pushed.
+.log/
+.claude/
+CLAUDE.md
+CLAUDE-template.md
+.mcp.json
+docs/
+.agents/
+AGENTS.md
