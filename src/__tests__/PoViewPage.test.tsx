@@ -70,3 +70,30 @@ test('renders rows, filters, clears filters and re-queries on column apply', asy
 
   expect(gridErrors).toEqual([]);
 });
+
+test('column picker select / deselect all respect the cap and the search', async () => {
+  render(
+    <MemoryRouter>
+      <PoViewPage />
+    </MemoryRouter>
+  );
+  await screen.findByText('50 of 50 lines');
+  fireEvent.click(screen.getByText('Columns · 16'));
+
+  fireEvent.click(screen.getByText('Deselect all'));
+  expect(screen.getByText('0 of max 25 selected')).toBeTruthy();
+  expect((screen.getByText('Apply') as HTMLButtonElement).disabled).toBe(true);
+
+  fireEvent.click(screen.getByText('Select all'));
+  expect(screen.getByText('25 of max 25 selected')).toBeTruthy();
+  expect((screen.getByText('Select all') as HTMLButtonElement).disabled).toBe(true);
+
+  fireEvent.change(screen.getByPlaceholderText('Search columns…'), { target: { value: 'eta' } });
+  fireEvent.click(screen.getByText('Deselect all shown'));
+  const left = Number(screen.getByText(/of max 25 selected/).textContent?.split(' ')[0]);
+  expect(left).toBeLessThan(25);
+
+  fireEvent.click(screen.getByText('Select all shown'));
+  expect(screen.getByText('25 of max 25 selected')).toBeTruthy();
+  expect(gridErrors).toEqual([]);
+});

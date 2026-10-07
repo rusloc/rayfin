@@ -59,6 +59,20 @@ export function ColumnPicker({ all, selected, defaults, max, label, onApply }: C
   const toggle = (name: string) =>
     setDraft((d) => (d.includes(name) ? d.filter((n) => n !== name) : [...d, name]));
 
+  // Both act on the list as currently shown, so a search narrows them.
+  // Select all stops at the cap, in list order.
+  const selectAll = () =>
+    setDraft((d) => {
+      const room = max - d.length;
+      return room > 0 ? [...d, ...visible.filter((n) => !d.includes(n)).slice(0, room)] : d;
+    });
+  const deselectAll = () => {
+    const shown = new Set(visible);
+    setDraft((d) => d.filter((n) => !shown.has(n)));
+  };
+  const allShownPicked = visible.every((n) => picked.has(n));
+  const noneShownPicked = !visible.some((n) => picked.has(n));
+
   const apply = () => {
     setOpen(false);
     onApply(draft);
@@ -93,6 +107,22 @@ export function ColumnPicker({ all, selected, defaults, max, label, onApply }: C
                 className="font-medium text-blue-600 hover:text-blue-800"
               >
                 Reset to default
+              </button>
+            </div>
+            <div className="flex gap-3 text-xs font-medium">
+              <button
+                onClick={selectAll}
+                disabled={full || allShownPicked}
+                className="text-blue-600 hover:text-blue-800 disabled:text-gray-300"
+              >
+                {search.trim() ? 'Select all shown' : 'Select all'}
+              </button>
+              <button
+                onClick={deselectAll}
+                disabled={noneShownPicked}
+                className="text-blue-600 hover:text-blue-800 disabled:text-gray-300"
+              >
+                {search.trim() ? 'Deselect all shown' : 'Deselect all'}
               </button>
             </div>
           </div>
