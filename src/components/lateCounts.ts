@@ -4,15 +4,15 @@ import type { PoRow } from '@/services/poView';
 /** Column the late chart groups by. */
 export const LATE_CHART_DATE_COLUMN = '_po_creation_date';
 
-export interface LateByDay {
-  /** Late line count per 'YYYY-MM-DD' creation day (days without late lines are absent). */
+export interface LateByMonth {
+  /** Late line count per 'YYYY-MM' creation month (months without late lines are absent). */
   counts: Map<string, number>;
   /** Late lines without a creation date (cannot be placed on the axis). */
   undated: number;
 }
 
-/** Late lines (same rule as the pale red rows) counted per PO creation day. */
-export function lateByCreationDay(rows: readonly PoRow[], cutoff: string): LateByDay {
+/** Late lines (same rule as the pale red rows) counted per PO creation month. */
+export function lateByCreationMonth(rows: readonly PoRow[], cutoff: string): LateByMonth {
   const counts = new Map<string, number>();
   let undated = 0;
   for (const row of rows) {
@@ -22,20 +22,21 @@ export function lateByCreationDay(rows: readonly PoRow[], cutoff: string): LateB
       undated++;
       continue;
     }
-    const day = created.slice(0, 10);
-    counts.set(day, (counts.get(day) ?? 0) + 1);
+    const month = created.slice(0, 7);
+    counts.set(month, (counts.get(month) ?? 0) + 1);
   }
   return { counts, undated };
 }
 
-/** Every 'YYYY-MM-DD' day from `from` to `to`, both inclusive (empty when from > to). */
-export function dayRange(from: string, to: string): string[] {
-  const days: string[] = [];
-  const end = Date.parse(`${to}T00:00:00Z`);
-  for (let t = Date.parse(`${from}T00:00:00Z`); t <= end; t += 86_400_000) {
-    days.push(new Date(t).toISOString().slice(0, 10));
+/** Every 'YYYY-MM' month from `from` to `to`, both inclusive (empty when from > to). */
+export function monthRange(from: string, to: string): string[] {
+  const months: string[] = [];
+  let [y, m] = from.split('-').map(Number);
+  for (let key = from; key <= to; key = `${y}-${String(m).padStart(2, '0')}`) {
+    months.push(key);
+    if (++m > 12) [y, m] = [y + 1, 1];
   }
-  return days;
+  return months;
 }
 
 /** Clean y-axis ticks from 0 to a round top ≥ max (steps of 1 / 2 / 5 × 10^k, at most ~5 ticks). */

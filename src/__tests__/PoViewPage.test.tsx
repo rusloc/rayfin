@@ -27,8 +27,8 @@ vi.mock('@/services/poView', () => ({
         _etd: '2026-08-10',
         // Lines 1-5 are long overdue and not arrived; line 6 is overdue but arrived.
         ...(i >= 1 && i <= 6 ? { _eta: '2020-01-01', _arrival_date_actual: i === 6 ? '2020-01-10' : null } : {}),
-        // Late lines by creation day: 01-Sep ×2, 03-Sep ×2, line 4 undated; line 6 (arrived) is not late.
-        ...(i >= 1 && i <= 6 ? { _po_creation_date: [null, '2026-09-01', '2026-09-01', '2026-09-03', null, '2026-09-03', '2026-09-02'][i] } : {}),
+        // Late lines by creation month: Jul ×1, Sep ×3, line 4 undated; line 6 (arrived, Aug) is not late.
+        ...(i >= 1 && i <= 6 ? { _po_creation_date: [null, '2026-07-15', '2026-09-01', '2026-09-03', null, '2026-09-30', '2026-08-02'][i] } : {}),
       });
     })
   ),
@@ -271,7 +271,7 @@ test('late rule: overdue unarrived lines are pale red and searchable', async () 
   expect(gridErrors).toEqual([]);
 });
 
-test('late chart: title icon opens a 16:9 popup counting late lines per creation day, own date filter', async () => {
+test('late chart: title icon opens a 16:9 popup counting late lines per creation month, own month filter', async () => {
   render(
     <MemoryRouter>
       <PoViewPage />
@@ -285,22 +285,22 @@ test('late chart: title icon opens a 16:9 popup counting late lines per creation
   expect(dialog.className).toContain('aspect-video');
   const chart = within(dialog);
 
-  // Day axis 01..03 Sep, the empty 02-Sep included; count above every bar.
-  expect(chart.getByText('01-Sep-26')).toBeTruthy();
-  expect(chart.getByText('02-Sep-26')).toBeTruthy();
-  expect(chart.getByText('03-Sep-26')).toBeTruthy();
-  expect(chart.getByRole('img', { name: '01-Sep-2026: 2 late lines' })).toBeTruthy();
-  expect(chart.getByRole('img', { name: '03-Sep-2026: 2 late lines' })).toBeTruthy();
+  // Month axis Jul..Sep, the empty Aug included; count above every bar.
+  expect(chart.getByText('Jul-26')).toBeTruthy();
+  expect(chart.getByText('Aug-26')).toBeTruthy();
+  expect(chart.getByText('Sep-26')).toBeTruthy();
+  expect(chart.getByRole('img', { name: 'Jul 2026: 1 late lines' })).toBeTruthy();
+  expect(chart.getByRole('img', { name: 'Sep 2026: 3 late lines' })).toBeTruthy();
   expect(chart.getAllByRole('img')).toHaveLength(2);
   expect(dialog.textContent).toContain('4 late lines in range');
   expect(dialog.textContent).toContain('1 without a creation date');
 
-  // The chart's own From date narrows the chart only.
-  fireEvent.change(chart.getByLabelText('From'), { target: { value: '2026-09-02' } });
-  expect(chart.queryByText('01-Sep-26')).toBeNull();
-  expect(dialog.textContent).toContain('2 late lines in range');
-  fireEvent.click(chart.getByText('All dates'));
-  expect(chart.getByText('01-Sep-26')).toBeTruthy();
+  // The chart's own From month narrows the chart only.
+  fireEvent.change(chart.getByLabelText('From'), { target: { value: '2026-08' } });
+  expect(chart.queryByText('Jul-26')).toBeNull();
+  expect(dialog.textContent).toContain('3 late lines in range');
+  fireEvent.click(chart.getByText('All months'));
+  expect(chart.getByText('Jul-26')).toBeTruthy();
 
   fireEvent.keyDown(document, { key: 'Escape' });
   expect(screen.queryByRole('dialog')).toBeNull();
