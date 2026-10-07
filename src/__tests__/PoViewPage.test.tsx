@@ -387,12 +387,30 @@ test('line details: doc icon opens every column of the line, as a text list or J
   expect(body.textContent).toContain('TEUs: 2.5');
   expect(body.textContent).toMatch(/: —/); // empty columns are listed too
 
+  // Footer: format switcher on the left, Copy on the right; Copy takes the shown format.
+  const writeText = vi.fn(async () => {});
+  Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+  const textButton = within(panel).getByRole('button', { name: 'TEXT' });
+  const copyButton = within(panel).getByRole('button', { name: 'Copy' });
+  expect(textButton.compareDocumentPosition(copyButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+  fireEvent.click(copyButton);
+  await settle();
+  expect(writeText).toHaveBeenLastCalledWith(body.textContent);
+  expect(within(panel).getByRole('status').textContent).toBe('Copied as TEXT');
+
   fireEvent.click(within(panel).getByRole('button', { name: 'JSON' }));
-  const json = JSON.parse(within(panel).getByTestId('line-details').textContent ?? '{}');
+  const shown = within(panel).getByTestId('line-details').textContent ?? '{}';
+  const json = JSON.parse(shown);
   expect(json._po_no_ekporef).toBe('12504200');
   expect(json._po_creation_date).toBe('2026-09-01');
   expect(json._teus).toBe(2.5);
   expect(json._client_name).toBeNull();
+
+  fireEvent.click(copyButton);
+  await settle();
+  expect(writeText).toHaveBeenLastCalledWith(shown);
+  expect(within(panel).getByRole('status').textContent).toBe('Copied as JSON');
 
   // Same slot as the notes panel: opening a note closes the details.
   fireEvent.click(screen.getAllByText('+ note')[0]);

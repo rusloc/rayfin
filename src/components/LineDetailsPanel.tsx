@@ -25,7 +25,7 @@ export function DocIcon() {
 }
 
 const FORMATS: [DetailsFormat, string][] = [
-  ['text', 'Text list'],
+  ['text', 'TEXT'],
   ['json', 'JSON'],
 ];
 
@@ -34,6 +34,24 @@ export function LineDetailsPanel({ lineId, title, subtitle, load, onClose }: Lin
   const [row, setRow] = useState<PoRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [format, setFormat] = useState<DetailsFormat>('text');
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+
+  const content = row ? (format === 'json' ? lineAsJson(row) : lineAsText(row)) : null;
+
+  /** Copy what is shown (TEXT or JSON) to the clipboard; the note beside the button confirms for 2 s. */
+  const copy = () => {
+    if (content === null) return;
+    navigator.clipboard
+      .writeText(content)
+      .then(() => setCopyState('copied'))
+      .catch(() => setCopyState('failed'));
+  };
+
+  useEffect(() => {
+    if (copyState === 'idle') return;
+    const timer = setTimeout(() => setCopyState('idle'), 2000);
+    return () => clearTimeout(timer);
+  }, [copyState]);
 
   useEffect(() => {
     let stale = false;
@@ -77,9 +95,9 @@ export function LineDetailsPanel({ lineId, title, subtitle, load, onClose }: Lin
           <p role="alert" className="text-sm text-red-600">
             {error}
           </p>
-        ) : row ? (
+        ) : content !== null ? (
           <pre data-testid="line-details" className="whitespace-pre-wrap break-words font-mono text-xs leading-5 text-gray-800">
-            {format === 'json' ? lineAsJson(row) : lineAsText(row)}
+            {content}
           </pre>
         ) : (
           <p className="text-sm text-gray-400">Loading all columns…</p>
@@ -87,7 +105,6 @@ export function LineDetailsPanel({ lineId, title, subtitle, load, onClose }: Lin
       </div>
 
       <footer className="flex items-center justify-between gap-3 border-t border-gray-100 px-5 py-3">
-        <span className="text-xs font-medium text-gray-500">Format</span>
         <div role="group" aria-label="Format" className="flex rounded-lg border border-gray-200 p-0.5">
           {FORMATS.map(([value, label]) => (
             <button
@@ -101,6 +118,18 @@ export function LineDetailsPanel({ lineId, title, subtitle, load, onClose }: Lin
               {label}
             </button>
           ))}
+        </div>
+        <div className="flex items-center gap-3">
+          <span role="status" className={`text-xs ${copyState === 'failed' ? 'text-red-600' : 'text-gray-500'}`}>
+            {copyState === 'copied' ? `Copied as ${format.toUpperCase()}` : copyState === 'failed' ? 'Copy failed' : ''}
+          </span>
+          <button
+            onClick={copy}
+            disabled={content === null}
+            className="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-40"
+          >
+            Copy
+          </button>
         </div>
       </footer>
     </aside>
