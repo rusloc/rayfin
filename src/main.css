@@ -69,17 +69,18 @@
   --color-gray-900: #f4f4f5;
 }
 
+/* Surfaces = OKLCH lightness +15 % over the first cut; text steps lifted to keep ≥ 4.5:1 on them. */
 :root[data-theme='dark-gray'] {
-  --color-white: #36373c;
-  --color-gray-50: #2b2c30;
-  --color-gray-100: #404147;
-  --color-gray-200: #4a4b52;
-  --color-gray-300: #5c5d65;
-  --color-gray-400: #a0a1aa;
-  --color-gray-500: #b4b5bd;
-  --color-gray-600: #c4c5cc;
-  --color-gray-700: #dadbe0;
-  --color-gray-800: #e8e8ec;
+  --color-white: #434449;
+  --color-gray-50: #36373b;
+  --color-gray-100: #4f5056;
+  --color-gray-200: #5b5c63;
+  --color-gray-300: #70727a;
+  --color-gray-400: #b3b4bc;
+  --color-gray-500: #c3c4cb;
+  --color-gray-600: #d0d1d7;
+  --color-gray-700: #e0e1e5;
+  --color-gray-800: #ececef;
   --color-gray-900: #f6f6f8;
 }
 
@@ -111,6 +112,14 @@
 :root[data-theme='dark'] :is(.text-blue-600, .text-blue-700),
 :root[data-theme='dark-gray'] :is(.text-blue-600, .text-blue-700) {
   color: oklch(0.74 0.15 258);
+}
+
+/* Dark gray surfaces are lighter: text accents need one more step. */
+:root[data-theme='dark-gray'] {
+  --color-red-600: oklch(0.8 0.14 22);
+}
+:root[data-theme='dark-gray'] :is(.text-blue-600, .text-blue-700) {
+  color: oklch(0.82 0.11 258);
 }
 
 /* PO view: late lines (ETA > 7 days ago, no actual arrival) in pale red. */
