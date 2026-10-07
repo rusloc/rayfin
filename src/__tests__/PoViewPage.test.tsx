@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
@@ -25,6 +25,8 @@ vi.mock('@/services/poView', () => ({
         _client_name: 'EMIRATES AIRLINE',
         _pickup_date: '2026-08-01',
         _etd: '2026-08-10',
+        // Lines 1-5 are long overdue and not arrived; line 6 is overdue but arrived.
+        ...(i >= 1 && i <= 6 ? { _eta: '2020-01-01', _arrival_date_actual: i === 6 ? '2020-01-10' : null } : {}),
       });
     })
   ),
@@ -194,7 +196,7 @@ test('search by flag and by comment runs over shared notes', async () => {
   expect(await screen.findByText('49 of 50 lines')).toBeTruthy();
 
   runSearch(() => {
-    fireEvent.click(screen.getByText('Any'));
+    fireEvent.click(within(screen.getByRole('group', { name: 'Flag' })).getByText('Any'));
     fireEvent.change(screen.getByLabelText('Comment'), { target: { value: 'CONFIRMED' } });
   });
   expect(await screen.findByText('1 of 50 lines')).toBeTruthy();
@@ -233,5 +235,34 @@ test('shipment path: first column opens a popup with supplier, milestones and cl
 
   fireEvent.keyDown(document, { key: 'Escape' });
   expect(screen.queryByRole('dialog')).toBeNull();
+  expect(gridErrors).toEqual([]);
+});
+
+test('late rule: overdue unarrived lines are pale red and searchable', async () => {
+  render(
+    <MemoryRouter>
+      <PoViewPage />
+    </MemoryRouter>
+  );
+  await screen.findByText('50 of 50 lines');
+
+  const rowOf = (lineId: string) => document.querySelector(`.ag-row[row-id="${lineId}"]`);
+  await screen.findAllByLabelText('Show shipment path');
+  expect(rowOf('line-1')?.classList.contains('po-row-late')).toBe(true);
+  expect(rowOf('line-6')?.classList.contains('po-row-late')).toBe(false); // arrived
+  expect(rowOf('line-7')?.classList.contains('po-row-late')).toBe(false); // no ETA
+
+  const runSearch = (choice: string) => {
+    fireEvent.click(screen.getByLabelText('Search'));
+    fireEvent.click(screen.getByRole('button', { name: choice }));
+    fireEvent.click(screen.getAllByText('Search').at(-1)!);
+  };
+  runSearch('Late');
+  expect(await screen.findByText('5 of 50 lines')).toBeTruthy();
+  runSearch('Not late');
+  expect(await screen.findByText('45 of 50 lines')).toBeTruthy();
+
+  fireEvent.click(screen.getByText('Clear filters'));
+  expect(await screen.findByText('50 of 50 lines')).toBeTruthy();
   expect(gridErrors).toEqual([]);
 });

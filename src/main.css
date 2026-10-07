@@ -26,3 +26,11 @@
     -moz-osx-font-smoothing: grayscale;
   }
 }
+
+/* PO view: late lines (ETA > 7 days ago, no actual arrival) in pale red. */
+.ag-row.po-row-late {
+  background-color: #fef2f2; /* red-50 */
+}
+.ag-row.po-row-late.ag-row-hover {
+  background-color: #fee2e2; /* red-100 */
+}

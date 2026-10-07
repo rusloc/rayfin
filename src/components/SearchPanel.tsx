@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { activeCount, EMPTY_SEARCH, type ColumnSearchKey, type PoSearch } from './poSearch';
+import { activeCount, EMPTY_SEARCH, type ColumnSearchKey, type PoSearch, type TriState } from './poSearch';
 
 interface SearchPanelProps {
   value: PoSearch;
@@ -53,6 +53,36 @@ export function SearchPanel({ value, enabled, suggestions, onApply }: SearchPane
 
   const hint = (key: ColumnSearchKey) =>
     enabled[key] ? null : <span className="ml-1 font-normal text-gray-400">(add the column to search)</span>;
+
+  /** Any / yes / no segmented toggle for a boolean criterion. */
+  const triState = (key: 'flag' | 'late', legend: string, [yes, no]: [string, string]) => (
+    <fieldset className="space-y-1 text-xs font-medium text-gray-600">
+      <legend>{legend}</legend>
+      <div className="flex gap-1">
+        {(
+          [
+            ['any', 'Any'],
+            ['yes', yes],
+            ['no', no],
+          ] as [TriState, string][]
+        ).map(([value, text]) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={draft[key] === value}
+            onClick={() => setDraft((d) => ({ ...d, [key]: value }))}
+            className={`flex-1 rounded-lg border px-2 py-1.5 text-sm ${
+              draft[key] === value
+                ? 'border-blue-600 bg-blue-50 text-blue-700'
+                : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            {text}
+          </button>
+        ))}
+      </div>
+    </fieldset>
+  );
 
   return (
     <div ref={rootRef} className="relative">
@@ -131,32 +161,8 @@ export function SearchPanel({ value, enabled, suggestions, onApply }: SearchPane
             </div>
           </fieldset>
 
-          <fieldset className="space-y-1 text-xs font-medium text-gray-600">
-            <legend>Flag</legend>
-            <div className="flex gap-1" role="group" aria-label="Flag">
-              {(
-                [
-                  ['any', 'Any'],
-                  ['yes', '✓ Flagged'],
-                  ['no', '✗ Not flagged'],
-                ] as const
-              ).map(([value, text]) => (
-                <button
-                  key={value}
-                  type="button"
-                  aria-pressed={draft.flag === value}
-                  onClick={() => setDraft((d) => ({ ...d, flag: value }))}
-                  className={`flex-1 rounded-lg border px-2 py-1.5 text-sm ${
-                    draft.flag === value
-                      ? 'border-blue-600 bg-blue-50 text-blue-700'
-                      : 'border-gray-300 text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  {text}
-                </button>
-              ))}
-            </div>
-          </fieldset>
+          {triState('late', 'Late', ['Late', 'Not late'])}
+          {triState('flag', 'Flag', ['✓ Flagged', '✗ Not flagged'])}
           <label className="block space-y-1 text-xs font-medium text-gray-600">
             <span>Comment</span>
             <input value={draft.comment} onChange={set('comment')} placeholder="contains…" className={inputClass} />

@@ -6,6 +6,7 @@ import {
   ModuleRegistry,
   RenderApiModule,
   RowApiModule,
+  RowStyleModule,
   TextFilterModule,
   TooltipModule,
   ValidationModule,
@@ -33,6 +34,7 @@ import {
   columnLabel,
 } from '@/services/poColumns';
 import { listPoNotes, saveMyNote, type PoLineRef, type PoNote } from '@/services/poNotes';
+import { isLateLine, lateCutoff } from '@/services/poRules';
 import { listPoRows, type PoRow } from '@/services/poView';
 
 ModuleRegistry.registerModules([
@@ -41,6 +43,7 @@ ModuleRegistry.registerModules([
   DateFilterModule,
   ExternalFilterModule, // flag / comment search over notes
   RowApiModule, // api.getDisplayedRowCount()
+  RowStyleModule, // rowClassRules: late rows
   RenderApiModule, // api.refreshCells() for note cells
   TooltipModule,
   ...(import.meta.env.DEV ? [ValidationModule] : []),
@@ -342,12 +345,13 @@ export function PoViewPage() {
     gridRef.current?.api?.onFilterChanged();
   }, [search, notesByLine]);
 
-  const isExternalFilterPresent = useCallback(
-    () => searchRef.current.flag !== 'any' || searchRef.current.comment.trim() !== '',
-    []
-  );
+  const isExternalFilterPresent = useCallback(() => {
+    const { flag, late, comment } = searchRef.current;
+    return flag !== 'any' || late !== 'any' || comment.trim() !== '';
+  }, []);
   const doesExternalFilterPass = useCallback((node: IRowNode<PoRow>) => {
-    const { flag, comment } = searchRef.current;
+    const { flag, late, comment } = searchRef.current;
+    if (late !== 'any' && node.data && isLateLine(node.data, lateCutoff()) !== (late === 'yes')) return false;
     const notes = notesRef.current.get(String(node.data?._line_id)) ?? [];
     const flagged = notes.some((n) => n.flagged);
     if (flag === 'yes' && !flagged) return false;
@@ -355,6 +359,12 @@ export function PoViewPage() {
     const term = comment.trim().toLowerCase();
     return !term || notes.some((n) => n.comment?.toLowerCase().includes(term));
   }, []);
+
+  // Pale red: ETA more than 7 days ago and no actual arrival (services/poRules).
+  const rowClassRules = useMemo(() => {
+    const cutoff = lateCutoff();
+    return { 'po-row-late': ({ data }: { data?: PoRow }) => !!data && isLateLine(data, cutoff) };
+  }, [rows]); // eslint-disable-line react-hooks/exhaustive-deps -- recompute the cutoff when data reloads
 
   const searchEnabled = useMemo(() => {
     const shown = new Set(columns);
@@ -430,6 +440,7 @@ export function PoViewPage() {
             context={context}
             getRowId={({ data }) => String(data._line_id)}
             onGridReady={({ api }) => api.setFilterModel(toFilterModel(search))}
+            rowClassRules={rowClassRules}
             isExternalFilterPresent={isExternalFilterPresent}
             doesExternalFilterPass={doesExternalFilterPass}
             onModelUpdated={({ api }) => {
