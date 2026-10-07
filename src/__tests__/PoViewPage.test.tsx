@@ -48,7 +48,7 @@ test('renders rows, filters, clears filters and re-queries on column apply', asy
 
   expect(await screen.findByText('50 of 50 lines')).toBeTruthy();
   expect(screen.getAllByText('INFLIGHT DIRECT INC.').length).toBeGreaterThan(0);
-  expect(screen.getByText('PO NO EKPOREF')).toBeTruthy();
+  expect(screen.getByText('PO No. (EKPO Ref)')).toBeTruthy();
 
   const [poFilter] = document.querySelectorAll<HTMLInputElement>(
     '.ag-floating-filter input[type=text]'
@@ -62,7 +62,7 @@ test('renders rows, filters, clears filters and re-queries on column apply', asy
   expect(screen.getByText('50 of 50 lines')).toBeTruthy();
 
   fireEvent.click(screen.getByText('Columns · 16'));
-  fireEvent.click(screen.getByLabelText('TEUS'));
+  fireEvent.click(screen.getByLabelText('TEUs'));
   fireEvent.click(screen.getByText('Apply'));
   await settle();
   expect(vi.mocked(listPoRows)).toHaveBeenLastCalledWith(expect.arrayContaining(['_teus']));
