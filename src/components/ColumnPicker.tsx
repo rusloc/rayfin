@@ -91,9 +91,18 @@ export function ColumnPicker({ all, selected, defaults, max, label, onApply }: C
       {open && (
         <div className="absolute right-0 z-20 mt-2 w-96 rounded-xl bg-white popup-surface">
           <div className="space-y-2 border-b border-gray-100 p-3">
-            <p className={`text-xs ${full ? 'text-amber-600' : 'text-gray-500'}`}>
-              {draft.length} of max {max} selected
-            </p>
+            <div className="flex items-center justify-between">
+              <p className={`text-xs ${full ? 'text-amber-600' : 'text-gray-500'}`}>
+                {draft.length} of max {max} selected
+              </p>
+              <button
+                onClick={() => setOpen(false)}
+                aria-label="Close columns"
+                className="text-xl leading-none text-gray-400 hover:text-gray-700"
+              >
+                ×
+              </button>
+            </div>
             <input
               autoFocus
               value={search}

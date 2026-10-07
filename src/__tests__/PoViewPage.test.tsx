@@ -418,3 +418,22 @@ test('line details: doc icon opens every column of the line, as a text list or J
   expect(screen.queryByRole('complementary', { name: 'PO line details' })).toBeNull();
   expect(gridErrors).toEqual([]);
 });
+
+test('columns popup closes with its × without applying the draft', async () => {
+  render(
+    <MemoryRouter>
+      <PoViewPage />
+    </MemoryRouter>
+  );
+  await screen.findByText('50 of 50 lines');
+  const calls = vi.mocked(listPoRows).mock.calls.length;
+
+  fireEvent.click(screen.getByText('Columns · 16'));
+  fireEvent.click(screen.getByText('Deselect all'));
+  fireEvent.click(screen.getByRole('button', { name: 'Close columns' }));
+
+  expect(screen.queryByPlaceholderText('Search columns…')).toBeNull();
+  await settle();
+  expect(screen.getByText('Columns · 16')).toBeTruthy();
+  expect(vi.mocked(listPoRows).mock.calls.length).toBe(calls);
+});
