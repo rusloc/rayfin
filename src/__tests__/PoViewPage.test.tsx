@@ -341,3 +341,20 @@ test('late chart: clicking a bar closes the popup and filters the grid to that b
   expect(await screen.findByText('50 of 50 lines')).toBeTruthy();
   expect(gridErrors).toEqual([]);
 });
+
+test('search popup closes with its × without applying the draft', async () => {
+  render(
+    <MemoryRouter>
+      <PoViewPage />
+    </MemoryRouter>
+  );
+  await screen.findByText('50 of 50 lines');
+
+  fireEvent.click(screen.getByLabelText('Search'));
+  fireEvent.change(screen.getByLabelText('PO No.'), { target: { value: 'no-such-po' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Close search' }));
+
+  expect(screen.queryByLabelText('PO No.')).toBeNull();
+  await settle();
+  expect(screen.getByText('50 of 50 lines')).toBeTruthy();
+});

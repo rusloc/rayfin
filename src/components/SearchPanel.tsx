@@ -111,6 +111,17 @@ export function SearchPanel({ value, enabled, suggestions, onApply }: SearchPane
           }}
           className="absolute right-0 z-20 mt-2 w-96 space-y-3 rounded-xl bg-white p-4 popup-surface"
         >
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-gray-900">Search PO lines</p>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              aria-label="Close search"
+              className="text-xl leading-none text-gray-400 hover:text-gray-700"
+            >
+              ×
+            </button>
+          </div>
           <label className="block space-y-1 text-xs font-medium text-gray-600">
             <span>Supplier name{hint('supplier')}</span>
             <input

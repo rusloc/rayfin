@@ -172,7 +172,7 @@ export function LateChart({ rows, onClose, onSelectMonth }: LateChartProps) {
                             </span>
                             <span
                               className="absolute bottom-0 left-1/2 -translate-x-1/2 rounded-t bg-red-400 group-hover:bg-red-500 group-focus-visible:bg-red-500"
-                              style={{ height: pct(values[i]), width: 'min(24px, calc(100% - 4px))' }}
+                              style={{ height: pct(values[i]), width: 'calc(100% - 5px)' }}
                             />
                           </button>
                         )}
