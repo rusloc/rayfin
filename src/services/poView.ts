@@ -1,76 +1,19 @@
 import { getRayfinClient } from './rayfinClient';
+import { MAX_PO_COLUMNS, PO_COLUMN_BY_NAME, type PoColumnType } from './poColumns';
 
-/** One purchase-order line from the `_PO_VIEW_` table of the "Coms report" semantic model. */
-export interface PoLine {
-  poNo: string | null; // _po_no_ekporef
-  lineNo: number | null; // _line_no
-  masterLine: string | null; // _master_line
-  supplierName: string | null; // _supplier_name
-  clientName: string | null; // _client_name
-  branchBu: string | null; // _branch_bu
-  itemCode: string | null; // _item_code
-  commodity: string | null; // _commodity
-  poStatus: string | null; // _po_status
-  poCreationDate: string | null; // _po_creation_date as 'YYYY-MM-DD'
-  poNeedByDate: string | null; // _po_need_by_date as 'YYYY-MM-DD'
-  etd: string | null; // 'YYYY-MM-DD'
-  eta: string | null; // 'YYYY-MM-DD'
-  transportMode: string | null;
-  originCountry: string | null;
-  destinationCountry: string | null; // _destination_country_dest
-}
+/** Keys are model column names (e.g. '_po_no_ekporef'); dateTime → 'YYYY-MM-DD'; blank/whitespace string → null. */
+export type PoRow = Record<string, string | number | null>;
 
 /** Hard cap passed to Analysis Services; exceeding it fails the query with an `overflow` error. */
 export const PO_ROW_LIMIT = 50_000;
 
 /**
- * The only DAX in the app. Aliases are the {@link PoLine} property names so
- * the result columns (`[poNo]`, ...) map back without a lookup table.
+ * Fetch every `_PO_VIEW_` row (up to {@link PO_ROW_LIMIT}) for the given
+ * columns, as the signed-in user. Throws an `Error` with a user-readable
+ * message on invalid input or any query failure.
  */
-export const PO_VIEW_DAX = `
-EVALUATE
-SELECTCOLUMNS (
-    '_PO_VIEW_'
-    ,"poNo", '_PO_VIEW_'[_po_no_ekporef]
-    ,"lineNo", '_PO_VIEW_'[_line_no]
-    ,"masterLine", '_PO_VIEW_'[_master_line]
-    ,"supplierName", '_PO_VIEW_'[_supplier_name]
-    ,"clientName", '_PO_VIEW_'[_client_name]
-    ,"branchBu", '_PO_VIEW_'[_branch_bu]
-    ,"itemCode", '_PO_VIEW_'[_item_code]
-    ,"commodity", '_PO_VIEW_'[_commodity]
-    ,"poStatus", '_PO_VIEW_'[_po_status]
-    ,"poCreationDate", '_PO_VIEW_'[_po_creation_date]
-    ,"poNeedByDate", '_PO_VIEW_'[_po_need_by_date]
-    ,"etd", '_PO_VIEW_'[_etd]
-    ,"eta", '_PO_VIEW_'[_eta]
-    ,"transportMode", '_PO_VIEW_'[_transport_mode]
-    ,"originCountry", '_PO_VIEW_'[_origin_country]
-    ,"destinationCountry", '_PO_VIEW_'[_destination_country_dest]
-)
-`.trim();
-
-const STRING_KEYS = [
-  'poNo',
-  'masterLine',
-  'supplierName',
-  'clientName',
-  'branchBu',
-  'itemCode',
-  'commodity',
-  'poStatus',
-  'transportMode',
-  'originCountry',
-  'destinationCountry',
-] as const;
-
-const DATE_KEYS = ['poCreationDate', 'poNeedByDate', 'etd', 'eta'] as const;
-
-/**
- * Fetch every PO line (up to {@link PO_ROW_LIMIT}) as the signed-in user.
- * Throws an `Error` with a user-readable message on any failure.
- */
-export async function listPoLines(): Promise<PoLine[]> {
+export async function listPoRows(columns: readonly string[]): Promise<PoRow[]> {
+  const names = validateColumns(columns);
   const client = getRayfinClient();
 
   let result: Awaited<
@@ -78,7 +21,7 @@ export async function listPoLines(): Promise<PoLine[]> {
   >;
   try {
     result = await client.connectors.comsreport.executeQuery({
-      query: PO_VIEW_DAX,
+      query: buildPoDax(names),
       resultSetRowCountLimit: PO_ROW_LIMIT,
     });
   } catch (err) {
@@ -91,23 +34,63 @@ export async function listPoLines(): Promise<PoLine[]> {
     throw new Error(toUserMessage(result.error.category, result.error.message));
   }
 
-  const { columns, rows } = result.table;
+  const { columns: resultColumns, rows } = result.table;
   // Power BI names SELECTCOLUMNS aliases `[alias]`; accept the bare form too.
   const index = new Map<string, number>();
-  columns.forEach((col, i) => index.set(stripBrackets(col.name), i));
-  const at = (row: unknown[], key: string): unknown => {
-    const i = index.get(key);
-    return i === undefined ? null : row[i];
-  };
+  resultColumns.forEach((col, i) => index.set(stripBrackets(col.name), i));
+
+  const mappers = names.map((name) => ({
+    name,
+    at: index.get(name),
+    convert: CONVERTERS[PO_COLUMN_BY_NAME.get(name)!.type],
+  }));
 
   return rows.map((row) => {
-    const line = {} as PoLine;
-    for (const key of STRING_KEYS) line[key] = toText(at(row, key));
-    for (const key of DATE_KEYS) line[key] = toDateOnly(at(row, key));
-    line.lineNo = toNumber(at(row, 'lineNo'));
-    return line;
+    const out: PoRow = {};
+    for (const { name, at, convert } of mappers) {
+      out[name] = at === undefined ? null : convert(row[at]);
+    }
+    return out;
   });
 }
+
+/**
+ * Whitelist check against the column catalog. This is also the DAX-injection
+ * guard: only catalog names ever reach the query text. Duplicates collapse.
+ */
+function validateColumns(columns: readonly string[]): string[] {
+  const names = [...new Set(columns)];
+  if (names.length === 0) {
+    throw new Error('Pick at least one column.');
+  }
+  if (names.length > MAX_PO_COLUMNS) {
+    throw new Error(
+      `Pick at most ${MAX_PO_COLUMNS} columns (you picked ${names.length}).`
+    );
+  }
+  const unknown = names.filter((n) => !PO_COLUMN_BY_NAME.has(n));
+  if (unknown.length > 0) {
+    throw new Error(
+      `Unknown PO view column${unknown.length > 1 ? 's' : ''}: ${unknown.join(', ')}.`
+    );
+  }
+  return names;
+}
+
+/** `EVALUATE SELECTCOLUMNS ( '_PO_VIEW_', "<name>", '_PO_VIEW_'[<name>], ... )`, alias = model column name. */
+function buildPoDax(names: readonly string[]): string {
+  const lines = names.map((n) => `    ,"${n}", '_PO_VIEW_'[${n}]`);
+  return ['EVALUATE', 'SELECTCOLUMNS (', "    '_PO_VIEW_'", ...lines, ')'].join(
+    '\n'
+  );
+}
+
+const CONVERTERS: Record<PoColumnType, (value: unknown) => string | number | null> = {
+  string: toText,
+  int64: toNumber,
+  double: toNumber,
+  dateTime: toDateOnly,
+};
 
 function toUserMessage(category: string, message: string): string {
   switch (category) {
