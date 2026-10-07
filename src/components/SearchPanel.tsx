@@ -109,7 +109,7 @@ export function SearchPanel({ value, enabled, suggestions, onApply }: SearchPane
             e.preventDefault();
             apply(draft);
           }}
-          className="absolute right-0 z-20 mt-2 w-96 space-y-3 rounded-xl border border-gray-200 bg-white p-4 shadow-lg"
+          className="absolute right-0 z-20 mt-2 w-96 space-y-3 rounded-xl bg-white p-4 popup-surface"
         >
           <label className="block space-y-1 text-xs font-medium text-gray-600">
             <span>Supplier name{hint('supplier')}</span>

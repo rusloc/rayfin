@@ -122,6 +122,24 @@
   color: oklch(0.82 0.11 258);
 }
 
+/*
+ * Pop-up windows (modals, side panel, popovers): 2px border + accent glow.
+ * The border is gray-500, which the themes re-map, so it contrasts with the
+ * surface in every mode (light 4.8:1, dark 6.9:1, dark-gray 5.6:1).
+ */
+:root {
+  --popup-border: var(--color-gray-500);
+  --popup-glow: 0 0 0 3px rgb(37 99 235 / 0.16), 0 0 28px 6px rgb(37 99 235 / 0.32), 0 20px 40px rgb(0 0 0 / 0.18);
+}
+:root[data-theme='dark'],
+:root[data-theme='dark-gray'] {
+  --popup-glow: 0 0 0 3px oklch(0.74 0.15 258 / 0.28), 0 0 32px 8px oklch(0.74 0.15 258 / 0.4), 0 20px 40px rgb(0 0 0 / 0.55);
+}
+.popup-surface {
+  border: 2px solid var(--popup-border);
+  box-shadow: var(--popup-glow);
+}
+
 /* PO view: late lines (ETA > 7 days ago, no actual arrival) in pale red. */
 .ag-row.po-row-late {
   background-color: var(--po-late-bg);

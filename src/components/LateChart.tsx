@@ -75,7 +75,7 @@ export function LateChart({ rows, onClose, onSelectMonth }: LateChartProps) {
         aria-modal="true"
         aria-label="Late lines chart"
         onMouseDown={(e) => e.stopPropagation()}
-        className="flex aspect-video w-[min(94vw,max(36rem,47vw),calc((100vh-2rem)*8/9))] flex-col rounded-2xl border border-gray-400 bg-white shadow-xl"
+        className="flex aspect-video w-[min(94vw,max(36rem,47vw),calc((100vh-2rem)*8/9))] flex-col rounded-2xl bg-white popup-surface"
       >
         <header className="flex items-start justify-between gap-3 border-b border-gray-100 px-4 py-2.5">
           <div>

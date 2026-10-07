@@ -44,7 +44,7 @@ export function JourneyPanel({ title, supplier, client, steps, onClose }: Journe
         aria-modal="true"
         aria-label="Shipment path"
         onMouseDown={(e) => e.stopPropagation()}
-        className="w-full max-w-xs rounded-2xl bg-white shadow-xl"
+        className="w-full max-w-xs rounded-2xl bg-white popup-surface"
       >
         <header className="flex items-start justify-between gap-3 border-b border-gray-100 px-5 py-4">
           <div className="min-w-0">

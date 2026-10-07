@@ -40,7 +40,7 @@ export function NotePanel({ line, subtitle, note, onSave, onClose }: NotePanelPr
   return (
     <aside
       aria-label="PO line notes"
-      className="fixed inset-y-0 right-0 z-30 flex w-full max-w-md flex-col border-l border-gray-200 bg-white shadow-xl"
+      className="fixed inset-y-0 right-0 z-30 flex w-full max-w-md flex-col bg-white popup-surface"
     >
       <header className="flex items-start justify-between border-b border-gray-100 px-5 py-4">
         <div>
