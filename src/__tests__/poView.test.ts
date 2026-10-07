@@ -14,7 +14,7 @@ import {
   MAX_PO_COLUMNS,
   PO_COLUMNS,
 } from '@/services/poColumns';
-import { PO_ROW_LIMIT, listPoRows } from '@/services/poView';
+import { PO_KEY_COLUMNS, PO_ROW_LIMIT, listPoRows } from '@/services/poView';
 
 // One column of each catalog type.
 const STR = '_po_no_ekporef';
@@ -22,6 +22,11 @@ const INT = '_line_no';
 const DBL = '_shipped';
 const DATE = '_etd';
 const MIXED = [STR, INT, DBL, DATE] as const;
+const LINE_ID = '_line_id';
+/** Columns the service projects for a caller's list: the list, then the key columns it lacks. */
+const projected = (columns: readonly string[]) => [
+  ...new Set([...columns, ...PO_KEY_COLUMNS]),
+];
 
 function success(columnNames: string[], rows: unknown[][]) {
   return {
@@ -75,16 +80,56 @@ describe('poView service', () => {
         expect(at).toBeGreaterThan(lastIndex);
         lastIndex = at;
       }
-      // Exactly one alias pair per column — nothing else in the projection.
-      expect(dax.match(/^ {4},"/gm)).toHaveLength(DEFAULT_PO_COLUMNS.length);
+      // Exactly one alias pair per column — the request plus the missing key columns.
+      expect(dax.match(/^ {4},"/gm)).toHaveLength(projected(DEFAULT_PO_COLUMNS).length);
     });
 
     it('collapses duplicate column names before building the query', async () => {
       await listPoRows([STR, INT, STR, INT, STR]);
       const dax = sentDax();
-      expect(dax.match(/^ {4},"/gm)).toHaveLength(2);
+      // STR and INT are key columns themselves; only _line_id is added.
+      expect(dax.match(/^ {4},"/gm)).toHaveLength(3);
       expect(dax.split(`"${STR}"`)).toHaveLength(2);
       expect(dax.split(`"${INT}"`)).toHaveLength(2);
+      expect(dax.split(`"${LINE_ID}"`)).toHaveLength(2);
+    });
+  });
+
+  describe('key columns', () => {
+    it('exposes the three note-join keys, all in the catalog', () => {
+      expect(PO_KEY_COLUMNS).toEqual([LINE_ID, STR, INT]);
+      for (const name of PO_KEY_COLUMNS) {
+        expect(PO_COLUMNS.some((c) => c.name === name)).toBe(true);
+      }
+    });
+
+    it('always projects the key columns, after the requested ones, without duplicates', async () => {
+      await listPoRows([DBL, DATE]);
+      const dax = sentDax();
+      const order = [DBL, DATE, ...PO_KEY_COLUMNS].map((n) => dax.indexOf(`"${n}"`));
+      expect(order.every((at) => at >= 0)).toBe(true);
+      expect(order).toEqual([...order].sort((a, b) => a - b));
+      expect(dax.match(/^ {4},"/gm)).toHaveLength(5);
+
+      executeQuery.mockClear();
+      await listPoRows([INT, DBL, LINE_ID]);
+      expect(sentDax().match(/^ {4},"/gm)).toHaveLength(4);
+    });
+
+    it('does not count the key columns against MAX_PO_COLUMNS', async () => {
+      const nonKeys = PO_COLUMNS.map((c) => c.name).filter((n) => !PO_KEY_COLUMNS.includes(n));
+      const exactly = nonKeys.slice(0, MAX_PO_COLUMNS);
+      await expect(listPoRows(exactly)).resolves.toEqual([]);
+      expect(sentDax().match(/^ {4},"/gm)).toHaveLength(MAX_PO_COLUMNS + PO_KEY_COLUMNS.length);
+      await expect(listPoRows(nonKeys.slice(0, MAX_PO_COLUMNS + 1))).rejects.toThrow(
+        `Pick at most ${MAX_PO_COLUMNS} columns`
+      );
+    });
+
+    it('fills a key column with null when the result lacks it', async () => {
+      executeQuery.mockResolvedValue(success([`[${DBL}]`], [[1.5]]));
+      const [row] = await listPoRows([DBL]);
+      expect(row).toEqual({ [DBL]: 1.5, [LINE_ID]: null, [STR]: null, [INT]: null });
     });
   });
 
@@ -134,6 +179,7 @@ describe('poView service', () => {
         [INT]: 10,
         [DBL]: 12.5,
         [DATE]: '2026-09-16',
+        [LINE_ID]: null,
       });
     });
 
@@ -150,13 +196,14 @@ describe('poView service', () => {
         [INT]: 7,
         [DBL]: 0.25,
         [DATE]: '2026-09-16',
+        [LINE_ID]: null,
       });
     });
 
-    it('keeps the key set equal to the requested columns, in request order', async () => {
+    it('keeps the key set equal to the requested columns plus missing key columns, in that order', async () => {
       executeQuery.mockResolvedValue(success([`[${INT}]`, `[${STR}]`], [[1, 'A']]));
       const [row] = await listPoRows([STR, INT]);
-      expect(Object.keys(row)).toEqual([STR, INT]);
+      expect(Object.keys(row)).toEqual([STR, INT, LINE_ID]);
     });
 
     it('string: trims; blank, whitespace, null and missing columns become null', async () => {

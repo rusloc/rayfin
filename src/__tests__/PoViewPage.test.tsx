@@ -3,10 +3,11 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
 import { PoViewPage } from '@/pages/PoViewPage';
+import { saveMyNote } from '@/services/poNotes';
 import { listPoRows } from '@/services/poView';
 
 vi.mock('@/hooks/AuthContext', () => ({
-  useAuth: () => ({ signOut: vi.fn(), user: { email: 'user@example.com' } }),
+  useAuth: () => ({ signOut: vi.fn(), user: { id: 'u1', email: 'user@example.com' } }),
 }));
 
 vi.mock('@/services/poView', () => ({
@@ -15,6 +16,7 @@ vi.mock('@/services/poView', () => ({
       const row: Record<string, string | number | null> = {};
       for (const c of columns) row[c] = null;
       return Object.assign(row, {
+        _line_id: `line-${i}`,
         _po_no_ekporef: `1250420${i}`,
         _line_no: 1,
         _master_line: 'Master',
@@ -22,6 +24,27 @@ vi.mock('@/services/poView', () => ({
         _po_need_by_date: '2026-09-16',
       });
     })
+  ),
+}));
+
+const note = (over: Record<string, unknown>) => ({
+  id: 'n-other',
+  lineId: 'line-0',
+  poNo: '12504200',
+  lineNo: '1',
+  flagged: true,
+  comment: 'Supplier confirmed new ETD',
+  authorEmail: 'colleague@example.com',
+  userId: 'u2',
+  createdAt: '2026-10-07T10:00:00.000Z',
+  updatedAt: '2026-10-07T10:00:00.000Z',
+  ...over,
+});
+
+vi.mock('@/services/poNotes', () => ({
+  listPoNotes: vi.fn(async () => [note({})]),
+  saveMyNote: vi.fn(async (line: { lineId: string }, state: { flagged: boolean; comment: string | null }) =>
+    note({ id: 'n-mine', lineId: line.lineId, userId: 'u1', authorEmail: 'user@example.com', ...state })
   ),
 }));
 
@@ -95,5 +118,38 @@ test('column picker select / deselect all respect the cap and the search', async
 
   fireEvent.click(screen.getByText('Select all shown'));
   expect(screen.getByText('25 of max 25 selected')).toBeTruthy();
+  expect(gridErrors).toEqual([]);
+});
+
+test('notes: others are shown, my flag toggles, my comment saves', async () => {
+  render(
+    <MemoryRouter>
+      <PoViewPage />
+    </MemoryRouter>
+  );
+  await screen.findByText('50 of 50 lines');
+
+  // Line 0 carries a colleague's flagged note.
+  fireEvent.click(await screen.findByText('💬 1'));
+  expect(await screen.findByText('Supplier confirmed new ETD')).toBeTruthy();
+  expect(screen.getByText('colleague@example.com')).toBeTruthy();
+
+  fireEvent.change(screen.getByPlaceholderText('Add a comment…'), { target: { value: '  chase supplier  ' } });
+  fireEvent.click(screen.getByText('Save'));
+  await settle();
+  expect(vi.mocked(saveMyNote)).toHaveBeenLastCalledWith(
+    { lineId: 'line-0', poNo: '12504200', lineNo: '1' },
+    { flagged: false, comment: 'chase supplier' }
+  );
+  expect(screen.queryByLabelText('PO line notes')).toBeNull();
+  expect(await screen.findByText('💬 2')).toBeTruthy();
+
+  const flags = screen.getAllByLabelText('Flag this line');
+  fireEvent.click(flags[1]);
+  await settle();
+  expect(vi.mocked(saveMyNote)).toHaveBeenLastCalledWith(
+    { lineId: 'line-1', poNo: '12504201', lineNo: '1' },
+    { flagged: true, comment: null }
+  );
   expect(gridErrors).toEqual([]);
 });

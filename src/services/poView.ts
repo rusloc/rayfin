@@ -8,12 +8,26 @@ export type PoRow = Record<string, string | number | null>;
 export const PO_ROW_LIMIT = 50_000;
 
 /**
+ * Key columns every row carries regardless of the caller's pick, so PO line
+ * notes can attach to any row (ADR-0005). `_line_id` is the unique row key;
+ * the other two are kept on the note for display.
+ */
+export const PO_KEY_COLUMNS: readonly string[] = [
+  '_line_id',
+  '_po_no_ekporef',
+  '_line_no',
+];
+
+/**
  * Fetch every `_PO_VIEW_` row (up to {@link PO_ROW_LIMIT}) for the given
- * columns, as the signed-in user. Throws an `Error` with a user-readable
- * message on invalid input or any query failure.
+ * columns plus {@link PO_KEY_COLUMNS}, as the signed-in user. The caller's
+ * list is validated and capped on its own; the key columns are appended
+ * afterwards (de-duplicated) and never count against {@link MAX_PO_COLUMNS}.
+ * Throws an `Error` with a user-readable message on invalid input or any
+ * query failure.
  */
 export async function listPoRows(columns: readonly string[]): Promise<PoRow[]> {
-  const names = validateColumns(columns);
+  const names = [...new Set([...validateColumns(columns), ...PO_KEY_COLUMNS])];
   const client = getRayfinClient();
 
   let result: Awaited<
