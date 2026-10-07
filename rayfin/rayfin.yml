@@ -1,5 +1,5 @@
 id: rayfin-demo
-name: rayfin-demo
+name: COMS
 version: 1.0.0
 services:
   auth:
@@ -10,6 +10,7 @@ services:
       enabled: true
     allowedRedirectUris:
       - http://localhost:5173
+      - https://flat-grove-9e371e9153-northeurope.webapp.fabricapps.net
   data:
     enabled: true
     dialect: mssql
@@ -19,3 +20,14 @@ services:
     buildCommand: npm run build:fabric
     indexDocument: index.html
     assetAccess: protected
+connectors:
+  - name: comsreport
+    type: fabric-semanticmodel
+    config:
+      workspaceId: e7e263e3-1103-4fbb-9098-2ad78bf30664
+      itemId: d0a3640c-3a78-49c4-ab8e-1a55b3666637
+    auth:
+      type: delegated
+    version: "1"
+    operations:
+      - name: executeQuery

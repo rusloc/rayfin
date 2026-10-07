@@ -1,10 +1,21 @@
 import {
-  RayfinClient,
+  ConnectorsRayfinClient,
   resolveRayfinConfig,
+  type FunctionsSchema,
   type RayfinRuntimeConfig,
 } from '@microsoft/rayfin-client';
+import { fabricSemanticModel } from '@microsoft/rayfin-connector-fabric-semanticmodel';
 
+import { connectorConfig as comsreportConfig } from '../../rayfin/connectors/comsreport/schema';
+import type { AppConnectorsSchema } from '../../rayfin/connectors/schema';
 import type { AppSchema } from '../../rayfin/data/schema';
+
+/** The app's client: data entities + the connectors declared in rayfin.yml. */
+export type AppRayfinClient = ConnectorsRayfinClient<
+  AppSchema,
+  FunctionsSchema,
+  AppConnectorsSchema
+>;
 
 export interface RayfinClientConfig {
   baseUrl: string;
@@ -17,12 +28,12 @@ export interface RayfinClientConfig {
   runtimeConfig?: RayfinRuntimeConfig;
 }
 
-let client: RayfinClient<AppSchema> | null = null;
+let client: AppRayfinClient | null = null;
 let localDev = false;
 
 export async function initRayfinClient(
   config: RayfinClientConfig
-): Promise<RayfinClient<AppSchema>> {
+): Promise<AppRayfinClient> {
   if (client) {
     throw new Error('Rayfin client is already initialized.');
   }
@@ -31,20 +42,31 @@ export async function initRayfinClient(
     publishableKey: config.publishableKey,
     ...config.runtimeConfig,
   });
-  client = new RayfinClient<AppSchema>({
-    // resolved.baseUrl/publishableKey are always set: config.baseUrl/publishableKey
-    // are non-optional defaults, so the resolve step can only overlay on top of them.
-    baseUrl: resolved.baseUrl!,
-    publishableKey: resolved.publishableKey!,
-    authStorage: true,
-    functionsBaseUrl: config.functionsBaseUrl,
-    runtimeConfig: resolved.runtimeConfig,
-  });
+  client = new ConnectorsRayfinClient<
+    AppSchema,
+    FunctionsSchema,
+    AppConnectorsSchema
+  >(
+    {
+      // resolved.baseUrl/publishableKey are always set: config.baseUrl/publishableKey
+      // are non-optional defaults, so the resolve step can only overlay on top of them.
+      baseUrl: resolved.baseUrl!,
+      publishableKey: resolved.publishableKey!,
+      authStorage: true,
+      functionsBaseUrl: config.functionsBaseUrl,
+      runtimeConfig: resolved.runtimeConfig,
+      // Routing config per connector, keyed by the rayfin.yml connector name.
+      connectors: { comsreport: comsreportConfig },
+    },
+    // Runtime hooks per connector: decodes the Arrow/JSON response and
+    // normalises executeQuery into SemanticModelQueryResult.
+    { comsreport: fabricSemanticModel() }
+  );
   localDev = config.localDev;
   return client;
 }
 
-export function getRayfinClient(): RayfinClient<AppSchema> {
+export function getRayfinClient(): AppRayfinClient {
   if (!client) {
     throw new Error(
       'Rayfin client not initialized. Call bootstrapAuth() first.'

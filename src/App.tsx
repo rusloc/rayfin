@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import {
   BrowserRouter,
   Navigate,
@@ -9,6 +10,11 @@ import {
 import { AuthPage } from '@/components/AuthPage';
 import { useAuth } from '@/hooks/AuthContext';
 import { HomePage } from '@/pages/HomePage';
+
+// Lazy so AG Grid only loads when the PO view is opened.
+const PoViewPage = lazy(() =>
+  import('@/pages/PoViewPage').then((m) => ({ default: m.PoViewPage }))
+);
 
 /** The route a visitor asked for before being sent to sign in. */
 interface AuthRedirectState {
@@ -90,6 +96,16 @@ function App() {
           element={
             <AuthGuard requireAuth={true}>
               <HomePage />
+            </AuthGuard>
+          }
+        />
+        <Route
+          path="/po"
+          element={
+            <AuthGuard requireAuth={true}>
+              <Suspense fallback={null}>
+                <PoViewPage />
+              </Suspense>
             </AuthGuard>
           }
         />

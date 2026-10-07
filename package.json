@@ -25,9 +25,13 @@
   "dependencies": {
     "@microsoft/rayfin-auth-provider-fabric": "^1.36.2",
     "@microsoft/rayfin-client": "^1.36.2",
+    "@microsoft/rayfin-connector-fabric-semanticmodel": "^1.36.2",
+    "@microsoft/rayfin-connectors": "^1.36.2",
     "@microsoft/rayfin-core": "^1.36.2",
     "@microsoft/rayfin-local-dev": "^1.36.2",
     "@tailwindcss/vite": "^4.1.11",
+    "ag-grid-community": "^36.2.0",
+    "ag-grid-react": "^36.2.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.1.1"
