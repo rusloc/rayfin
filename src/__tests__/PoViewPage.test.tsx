@@ -168,3 +168,38 @@ test('notes: others are shown, my flag toggles, my comment saves', async () => {
   );
   expect(gridErrors).toEqual([]);
 });
+
+test('search by flag and by comment runs over shared notes', async () => {
+  render(
+    <MemoryRouter>
+      <PoViewPage />
+    </MemoryRouter>
+  );
+  await screen.findByText('50 of 50 lines');
+  await screen.findByText('💬 1');
+
+  const runSearch = (setup: () => void) => {
+    fireEvent.click(screen.getByLabelText('Search'));
+    setup();
+    fireEvent.click(screen.getAllByText('Search').at(-1)!);
+  };
+
+  runSearch(() => fireEvent.click(screen.getByText('✓ Flagged')));
+  expect(await screen.findByText('1 of 50 lines')).toBeTruthy();
+
+  runSearch(() => fireEvent.click(screen.getByText('✗ Not flagged')));
+  expect(await screen.findByText('49 of 50 lines')).toBeTruthy();
+
+  runSearch(() => {
+    fireEvent.click(screen.getByText('Any'));
+    fireEvent.change(screen.getByLabelText('Comment'), { target: { value: 'CONFIRMED' } });
+  });
+  expect(await screen.findByText('1 of 50 lines')).toBeTruthy();
+
+  runSearch(() => fireEvent.change(screen.getByLabelText('Comment'), { target: { value: 'nothing-like-this' } }));
+  expect(await screen.findByText('0 of 50 lines')).toBeTruthy();
+
+  fireEvent.click(screen.getByText('Clear filters'));
+  expect(await screen.findByText('50 of 50 lines')).toBeTruthy();
+  expect(gridErrors).toEqual([]);
+});

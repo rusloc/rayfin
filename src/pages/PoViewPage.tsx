@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ClientSideRowModelModule,
   DateFilterModule,
+  ExternalFilterModule,
   ModuleRegistry,
   RenderApiModule,
   RowApiModule,
@@ -11,6 +12,7 @@ import {
   themeQuartz,
   type ColDef,
   type FilterModel,
+  type IRowNode,
   type ICellRendererParams,
   type ValueFormatterParams,
 } from 'ag-grid-community';
@@ -19,7 +21,7 @@ import { AgGridReact } from 'ag-grid-react';
 import { AppHeader } from '@/components/AppHeader';
 import { ColumnPicker } from '@/components/ColumnPicker';
 import { NotePanel } from '@/components/NotePanel';
-import { EMPTY_SEARCH, type PoSearch } from '@/components/poSearch';
+import { EMPTY_SEARCH, type ColumnSearchKey, type PoSearch } from '@/components/poSearch';
 import { SearchPanel } from '@/components/SearchPanel';
 import { useAuth } from '@/hooks/AuthContext';
 import {
@@ -36,6 +38,7 @@ ModuleRegistry.registerModules([
   ClientSideRowModelModule,
   TextFilterModule,
   DateFilterModule,
+  ExternalFilterModule, // flag / comment search over notes
   RowApiModule, // api.getDisplayedRowCount()
   RenderApiModule, // api.refreshCells() for note cells
   TooltipModule,
@@ -66,7 +69,7 @@ function formatDecimal({ value }: ValueFormatterParams<PoRow>) {
 }
 
 /** The four searchable columns (driven from the Search panel); every column sorts. */
-const SEARCH_COLUMNS: Record<keyof PoSearch, string> = {
+const SEARCH_COLUMNS: Record<ColumnSearchKey, string> = {
   supplier: '_supplier_name',
   masterLine: '_master_line',
   poNo: '_po_no_ekporef',
@@ -288,10 +291,35 @@ export function PoViewPage() {
     gridRef.current?.api?.setFilterModel(toFilterModel(search));
   }, [search, columnDefs, rows]);
 
+  // Flag / comment criteria match notes, not row data, so they run as AG Grid's
+  // external filter. The callbacks read refs and the grid is told to re-filter
+  // whenever the criteria or the notes change.
+  const searchRef = useRef(search);
+  const notesRef = useRef(notesByLine);
+  useEffect(() => {
+    searchRef.current = search;
+    notesRef.current = notesByLine;
+    gridRef.current?.api?.onFilterChanged();
+  }, [search, notesByLine]);
+
+  const isExternalFilterPresent = useCallback(
+    () => searchRef.current.flag !== 'any' || searchRef.current.comment.trim() !== '',
+    []
+  );
+  const doesExternalFilterPass = useCallback((node: IRowNode<PoRow>) => {
+    const { flag, comment } = searchRef.current;
+    const notes = notesRef.current.get(String(node.data?._line_id)) ?? [];
+    const flagged = notes.some((n) => n.flagged);
+    if (flag === 'yes' && !flagged) return false;
+    if (flag === 'no' && flagged) return false;
+    const term = comment.trim().toLowerCase();
+    return !term || notes.some((n) => n.comment?.toLowerCase().includes(term));
+  }, []);
+
   const searchEnabled = useMemo(() => {
     const shown = new Set(columns);
     const entries = Object.entries(SEARCH_COLUMNS).map(([key, col]) => [key, shown.has(col)]);
-    return Object.fromEntries(entries) as Record<keyof PoSearch, boolean>;
+    return Object.fromEntries(entries) as Record<ColumnSearchKey, boolean>;
   }, [columns]);
 
   const suggestions = useMemo(
@@ -362,6 +390,8 @@ export function PoViewPage() {
             context={context}
             getRowId={({ data }) => String(data._line_id)}
             onGridReady={({ api }) => api.setFilterModel(toFilterModel(search))}
+            isExternalFilterPresent={isExternalFilterPresent}
+            doesExternalFilterPass={doesExternalFilterPass}
             onModelUpdated={({ api }) => {
               setShown(api.getDisplayedRowCount());
               setFiltered(api.isAnyFilterPresent());

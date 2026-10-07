@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { activeCount, EMPTY_SEARCH, type PoSearch } from './poSearch';
+import { activeCount, EMPTY_SEARCH, type ColumnSearchKey, type PoSearch } from './poSearch';
 
 interface SearchPanelProps {
   value: PoSearch;
   /** Which criteria can apply: a filter only works while its column is in the grid. */
-  enabled: Record<keyof PoSearch, boolean>;
+  enabled: Record<ColumnSearchKey, boolean>;
   suggestions: { supplier: string[]; masterLine: string[] };
   onApply: (next: PoSearch) => void;
 }
@@ -51,7 +51,7 @@ export function SearchPanel({ value, enabled, suggestions, onApply }: SearchPane
     onApply(next);
   };
 
-  const hint = (key: keyof PoSearch) =>
+  const hint = (key: ColumnSearchKey) =>
     enabled[key] ? null : <span className="ml-1 font-normal text-gray-400">(add the column to search)</span>;
 
   return (
@@ -130,6 +130,37 @@ export function SearchPanel({ value, enabled, suggestions, onApply }: SearchPane
               />
             </div>
           </fieldset>
+
+          <fieldset className="space-y-1 text-xs font-medium text-gray-600">
+            <legend>Flag</legend>
+            <div className="flex gap-1" role="group" aria-label="Flag">
+              {(
+                [
+                  ['any', 'Any'],
+                  ['yes', '✓ Flagged'],
+                  ['no', '✗ Not flagged'],
+                ] as const
+              ).map(([value, text]) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={draft.flag === value}
+                  onClick={() => setDraft((d) => ({ ...d, flag: value }))}
+                  className={`flex-1 rounded-lg border px-2 py-1.5 text-sm ${
+                    draft.flag === value
+                      ? 'border-blue-600 bg-blue-50 text-blue-700'
+                      : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  {text}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+          <label className="block space-y-1 text-xs font-medium text-gray-600">
+            <span>Comment</span>
+            <input value={draft.comment} onChange={set('comment')} placeholder="contains…" className={inputClass} />
+          </label>
 
           <datalist id="po-search-suppliers">
             {suggestions.supplier.map((v) => (
