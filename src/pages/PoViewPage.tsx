@@ -341,12 +341,14 @@ export function PoViewPage() {
   }, [search, noteByLine]);
 
   const isExternalFilterPresent = useCallback(() => {
-    const { flag, late, comment } = searchRef.current;
-    return flag !== 'any' || late !== 'any' || comment.trim() !== '';
+    const { flag, late, comment, createdMonth } = searchRef.current;
+    return flag !== 'any' || late !== 'any' || comment.trim() !== '' || createdMonth !== '';
   }, []);
   const doesExternalFilterPass = useCallback((node: IRowNode<PoRow>) => {
-    const { flag, late, comment } = searchRef.current;
+    const { flag, late, comment, createdMonth } = searchRef.current;
     if (late !== 'any' && node.data && isLateLine(node.data, lateCutoff()) !== (late === 'yes')) return false;
+    // Creation month is always fetched (late chart), so it filters whatever columns are picked.
+    if (createdMonth && String(node.data?.[LATE_CHART_DATE_COLUMN] ?? '').slice(0, 7) !== createdMonth) return false;
     const note = notesRef.current.get(String(node.data?._line_id));
     const flagged = note?.flagged ?? false;
     if (flag === 'yes' && !flagged) return false;
@@ -467,7 +469,17 @@ export function PoViewPage() {
         />
       )}
 
-      {chartOpen && rows && <LateChart rows={rows} onClose={() => setChartOpen(false)} />}
+      {chartOpen && rows && (
+        <LateChart
+          rows={rows}
+          onClose={() => setChartOpen(false)}
+          onSelectMonth={(month) => {
+            // Show exactly the bar's lines: other criteria are dropped.
+            setChartOpen(false);
+            setSearch({ ...EMPTY_SEARCH, late: 'yes', createdMonth: month });
+          }}
+        />
+      )}
 
       {openRow && (
         <NotePanel

@@ -160,6 +160,10 @@ export function SearchPanel({ value, enabled, suggestions, onApply }: SearchPane
               />
             </div>
           </fieldset>
+          <label className="block space-y-1 text-xs font-medium text-gray-600">
+            <span>PO creation month</span>
+            <input type="month" value={draft.createdMonth} onChange={set('createdMonth')} className={inputClass} />
+          </label>
 
           {triState('late', 'Late', ['Late', 'Not late'])}
           {triState('flag', 'Flag', ['✓ Flagged', '✗ Not flagged'])}

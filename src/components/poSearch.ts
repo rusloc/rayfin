@@ -8,6 +8,8 @@ export interface PoSearch {
   /** 'YYYY-MM-DD' or '' */
   needByFrom: string;
   needByTo: string;
+  /** PO creation month 'YYYY-MM' or '' (set by clicking a late chart bar). */
+  createdMonth: string;
   /** Any note on the line flagged ('yes'), none flagged ('no'), or no constraint. */
   flag: TriState;
   /** Late = ETA more than 7 days ago and no actual arrival (see services/poRules). */
@@ -25,6 +27,7 @@ export const EMPTY_SEARCH: PoSearch = {
   poNo: '',
   needByFrom: '',
   needByTo: '',
+  createdMonth: '',
   flag: 'any',
   late: 'any',
   comment: '',
@@ -32,6 +35,6 @@ export const EMPTY_SEARCH: PoSearch = {
 
 /** Number of active criteria; the date range counts once. */
 export function activeCount(s: PoSearch): number {
-  const text = [s.supplier, s.masterLine, s.poNo, s.needByFrom || s.needByTo, s.comment];
+  const text = [s.supplier, s.masterLine, s.poNo, s.needByFrom || s.needByTo, s.createdMonth, s.comment];
   return text.filter((v) => v.trim()).length + [s.flag, s.late].filter((v) => v !== 'any').length;
 }

@@ -289,9 +289,9 @@ test('late chart: title icon opens a 16:9 popup counting late lines per creation
   expect(chart.getByText('Jul-26')).toBeTruthy();
   expect(chart.getByText('Aug-26')).toBeTruthy();
   expect(chart.getByText('Sep-26')).toBeTruthy();
-  expect(chart.getByRole('img', { name: 'Jul 2026: 1 late lines' })).toBeTruthy();
-  expect(chart.getByRole('img', { name: 'Sep 2026: 3 late lines' })).toBeTruthy();
-  expect(chart.getAllByRole('img')).toHaveLength(2);
+  expect(chart.getByRole('button', { name: 'Jul 2026: 1 late lines' })).toBeTruthy();
+  expect(chart.getByRole('button', { name: 'Sep 2026: 3 late lines' })).toBeTruthy();
+  expect(chart.getAllByRole('button', { name: /late lines$/ })).toHaveLength(2);
   expect(dialog.textContent).toContain('4 late lines in range');
   expect(dialog.textContent).toContain('1 without a creation date');
 
@@ -305,5 +305,39 @@ test('late chart: title icon opens a 16:9 popup counting late lines per creation
   fireEvent.keyDown(document, { key: 'Escape' });
   expect(screen.queryByRole('dialog')).toBeNull();
   expect(screen.getByText('50 of 50 lines')).toBeTruthy();
+  expect(gridErrors).toEqual([]);
+});
+
+test('late chart: clicking a bar closes the popup and filters the grid to that bar’s lines', async () => {
+  render(
+    <MemoryRouter>
+      <PoViewPage />
+    </MemoryRouter>
+  );
+  await screen.findByText('50 of 50 lines');
+
+  // An unrelated criterion first: the bar click replaces it.
+  fireEvent.click(screen.getByLabelText('Search'));
+  fireEvent.click(screen.getByText('✓ Flagged'));
+  fireEvent.click(screen.getAllByText('Search').at(-1)!);
+  expect(await screen.findByText('1 of 50 lines')).toBeTruthy();
+
+  fireEvent.click(screen.getByLabelText('Late lines chart'));
+  const dialog = await screen.findByRole('dialog', { name: 'Late lines chart' });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Sep 2026: 3 late lines' }));
+
+  expect(screen.queryByRole('dialog')).toBeNull();
+  // Lines 2, 3, 5: late and created in Sep 2026 (line 1 is late but from July; the flag criterion is gone).
+  expect(await screen.findByText('3 of 50 lines')).toBeTruthy();
+
+  // The criteria are visible (and editable) in the Search window.
+  fireEvent.click(screen.getByLabelText('Search'));
+  expect((screen.getByLabelText('PO creation month') as HTMLInputElement).value).toBe('2026-09');
+  expect(screen.getByRole('button', { name: 'Late' }).getAttribute('aria-pressed')).toBe('true');
+  expect(screen.getByRole('button', { name: '✓ Flagged' }).getAttribute('aria-pressed')).toBe('false');
+  fireEvent.keyDown(document, { key: 'Escape' });
+
+  fireEvent.click(screen.getByText('Clear filters'));
+  expect(await screen.findByText('50 of 50 lines')).toBeTruthy();
   expect(gridErrors).toEqual([]);
 });

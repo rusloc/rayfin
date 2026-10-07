@@ -9,6 +9,8 @@ interface LateChartProps {
   /** All loaded PO lines (not the grid's filtered view). */
   rows: readonly PoRow[];
   onClose: () => void;
+  /** A bar was clicked: 'YYYY-MM' of its creation month. */
+  onSelectMonth: (month: string) => void;
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -36,9 +38,10 @@ export function ChartIcon() {
 /**
  * 16:9 modal: late lines (pale red rows) counted per PO creation month. The
  * From / To months filter this chart only; empty bounds fall back to the
- * first / last month that has late lines.
+ * first / last month that has late lines. Clicking a bar hands its month to
+ * `onSelectMonth` (the page closes the chart and filters the grid).
  */
-export function LateChart({ rows, onClose }: LateChartProps) {
+export function LateChart({ rows, onClose, onSelectMonth }: LateChartProps) {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
 
@@ -154,21 +157,24 @@ export function LateChart({ rows, onClose }: LateChartProps) {
                     {months.map((month, i) => (
                       <div key={month} className="relative h-full flex-1" style={{ minWidth: SLOT }}>
                         {values[i] > 0 && (
-                          <>
+                          // The whole month column is the hit target, not just the bar.
+                          <button
+                            onClick={() => onSelectMonth(month)}
+                            aria-label={`${monthLabel(month, true)}: ${values[i]} late lines`}
+                            title={`${monthLabel(month, true)}: ${values[i]} late line${values[i] === 1 ? '' : 's'} · click to show in the table`}
+                            className="group absolute inset-0 cursor-pointer focus:outline-none"
+                          >
                             <span
                               className="absolute inset-x-0 text-center text-[11px] font-medium tabular-nums text-gray-700"
                               style={{ bottom: `calc(${pct(values[i])} + 2px)` }}
                             >
                               {values[i].toLocaleString()}
                             </span>
-                            <div
-                              role="img"
-                              aria-label={`${monthLabel(month, true)}: ${values[i]} late lines`}
-                              title={`${monthLabel(month, true)}: ${values[i]} late line${values[i] === 1 ? '' : 's'}`}
-                              className="absolute bottom-0 left-1/2 -translate-x-1/2 rounded-t bg-red-400 hover:bg-red-500"
+                            <span
+                              className="absolute bottom-0 left-1/2 -translate-x-1/2 rounded-t bg-red-400 group-hover:bg-red-500 group-focus-visible:bg-red-500"
                               style={{ height: pct(values[i]), width: 'min(24px, calc(100% - 4px))' }}
                             />
-                          </>
+                          </button>
                         )}
                       </div>
                     ))}
