@@ -10,6 +10,7 @@ import {
   ValidationModule,
   themeQuartz,
   type ColDef,
+  type FilterModel,
   type ICellRendererParams,
   type ValueFormatterParams,
 } from 'ag-grid-community';
@@ -18,6 +19,8 @@ import { AgGridReact } from 'ag-grid-react';
 import { AppHeader } from '@/components/AppHeader';
 import { ColumnPicker } from '@/components/ColumnPicker';
 import { NotePanel } from '@/components/NotePanel';
+import { EMPTY_SEARCH, type PoSearch } from '@/components/poSearch';
+import { SearchPanel } from '@/components/SearchPanel';
 import { useAuth } from '@/hooks/AuthContext';
 import {
   DEFAULT_PO_COLUMNS,
@@ -62,8 +65,44 @@ function formatDecimal({ value }: ValueFormatterParams<PoRow>) {
   return typeof value === 'number' ? value.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '';
 }
 
-/** The four requested filter columns; every column sorts. */
-const FILTER_COLUMNS = new Set(['_supplier_name', '_master_line', '_po_no_ekporef', '_po_need_by_date']);
+/** The four searchable columns (driven from the Search panel); every column sorts. */
+const SEARCH_COLUMNS: Record<keyof PoSearch, string> = {
+  supplier: '_supplier_name',
+  masterLine: '_master_line',
+  poNo: '_po_no_ekporef',
+  needByFrom: '_po_need_by_date',
+  needByTo: '_po_need_by_date',
+};
+const FILTER_COLUMNS = new Set(Object.values(SEARCH_COLUMNS));
+
+const contains = (filter: string) => ({ filterType: 'text', type: 'contains', filter: filter.trim() });
+
+/** Search criteria → AG Grid filter model. Open-ended date ranges use far bounds. */
+function toFilterModel(s: PoSearch): FilterModel {
+  const model: FilterModel = {};
+  if (s.supplier.trim()) model._supplier_name = contains(s.supplier);
+  if (s.masterLine.trim()) model._master_line = contains(s.masterLine);
+  if (s.poNo.trim()) model._po_no_ekporef = contains(s.poNo);
+  if (s.needByFrom || s.needByTo) {
+    model._po_need_by_date = {
+      filterType: 'date',
+      type: 'inRange',
+      dateFrom: `${s.needByFrom || '1900-01-01'} 00:00:00`,
+      dateTo: `${s.needByTo || '9999-12-31'} 00:00:00`,
+    };
+  }
+  return model;
+}
+
+/** Sorted distinct non-empty values of one column, for search suggestions. */
+function distinct(rows: PoRow[] | null, column: string): string[] {
+  const values = new Set<string>();
+  for (const row of rows ?? []) {
+    const v = row[column];
+    if (typeof v === 'string' && v) values.add(v);
+  }
+  return [...values].sort((a, b) => a.localeCompare(b)).slice(0, 500);
+}
 
 const WIDTHS: Record<string, number> = {
   _po_no_ekporef: 150,
@@ -86,6 +125,7 @@ function toColDef(name: string): ColDef<PoRow> {
     headerTooltip: name,
     width: WIDTHS[name],
     filter: FILTER_COLUMNS.has(name),
+    filterParams: name === '_po_need_by_date' ? { inRangeInclusive: true } : undefined,
     pinned: name === '_po_no_ekporef' ? 'left' : undefined,
   };
   if (type === 'dateTime') {
@@ -173,6 +213,7 @@ export function PoViewPage() {
   const [filtered, setFiltered] = useState(false);
   const [notes, setNotes] = useState<PoNote[]>([]);
   const [openRow, setOpenRow] = useState<PoRow | null>(null);
+  const [search, setSearch] = useState<PoSearch>(EMPTY_SEARCH);
 
   useEffect(() => {
     listPoNotes()
@@ -242,8 +283,32 @@ export function PoViewPage() {
 
   const columnDefs = useMemo(() => [...NOTE_COLUMNS, ...columns.map(toColDef)], [columns]);
 
+  // Filters live only in the Search panel; re-apply after columns or data change.
+  useEffect(() => {
+    gridRef.current?.api?.setFilterModel(toFilterModel(search));
+  }, [search, columnDefs, rows]);
+
+  const searchEnabled = useMemo(() => {
+    const shown = new Set(columns);
+    const entries = Object.entries(SEARCH_COLUMNS).map(([key, col]) => [key, shown.has(col)]);
+    return Object.fromEntries(entries) as Record<keyof PoSearch, boolean>;
+  }, [columns]);
+
+  const suggestions = useMemo(
+    () => ({ supplier: distinct(rows, '_supplier_name'), masterLine: distinct(rows, '_master_line') }),
+    [rows]
+  );
+
   const defaultColDef = useMemo<ColDef<PoRow>>(
-    () => ({ floatingFilter: true, resizable: true, width: 140, wrapHeaderText: true, autoHeaderHeight: true }),
+    () => ({
+      resizable: true,
+      width: 140,
+      wrapHeaderText: true,
+      autoHeaderHeight: true,
+      // One header row that only sorts: filtering happens in the Search panel.
+      suppressHeaderMenuButton: true,
+      suppressHeaderFilterButton: true,
+    }),
     []
   );
 
@@ -262,12 +327,13 @@ export function PoViewPage() {
             )}
             {filtered && (
               <button
-                onClick={() => gridRef.current?.api.setFilterModel(null)}
+                onClick={() => setSearch(EMPTY_SEARCH)}
                 className="text-blue-600 hover:text-blue-800 font-medium"
               >
                 Clear filters
               </button>
             )}
+            <SearchPanel value={search} enabled={searchEnabled} suggestions={suggestions} onApply={setSearch} />
             <ColumnPicker
               all={ALL_NAMES}
               selected={columns}
@@ -295,6 +361,7 @@ export function PoViewPage() {
             defaultColDef={defaultColDef}
             context={context}
             getRowId={({ data }) => String(data._line_id)}
+            onGridReady={({ api }) => api.setFilterModel(toFilterModel(search))}
             onModelUpdated={({ api }) => {
               setShown(api.getDisplayedRowCount());
               setFiltered(api.isAnyFilterPresent());

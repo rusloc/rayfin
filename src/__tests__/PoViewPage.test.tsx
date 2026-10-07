@@ -62,7 +62,7 @@ afterEach(() => vi.restoreAllMocks());
 
 const settle = () => act(() => new Promise((r) => setTimeout(r, 400)));
 
-test('renders rows, filters, clears filters and re-queries on column apply', async () => {
+test('renders rows, searches via the panel, clears and re-queries on column apply', async () => {
   render(
     <MemoryRouter>
       <PoViewPage />
@@ -73,16 +73,31 @@ test('renders rows, filters, clears filters and re-queries on column apply', asy
   expect(screen.getAllByText('INFLIGHT DIRECT INC.').length).toBeGreaterThan(0);
   expect(screen.getByText('PO No. (EKPO Ref)')).toBeTruthy();
 
-  const [poFilter] = document.querySelectorAll<HTMLInputElement>(
-    '.ag-floating-filter input[type=text]'
-  );
-  fireEvent.input(poFilter, { target: { value: 'no-such-po' } });
-  // Floating filters are debounced.
-  expect(await screen.findByText('0 of 50 lines', {}, { timeout: 2000 })).toBeTruthy();
+  // One header row that only sorts: no floating filters, no header filter buttons.
+  expect(document.querySelector('.ag-floating-filter')).toBeNull();
+  expect(document.querySelector('.ag-header-cell-filter-button')).toBeNull();
+
+  fireEvent.click(screen.getByLabelText('Search'));
+  fireEvent.change(screen.getByLabelText('PO No.'), { target: { value: 'no-such-po' } });
+  fireEvent.click(screen.getAllByText('Search').at(-1)!);
+  expect(await screen.findByText('0 of 50 lines')).toBeTruthy();
 
   fireEvent.click(screen.getByText('Clear filters'));
+  expect(await screen.findByText('50 of 50 lines')).toBeTruthy();
+
+  // Need-by range is inclusive on both ends (all mock rows are 2026-09-16).
+  fireEvent.click(screen.getByLabelText('Search'));
+  fireEvent.change(screen.getByLabelText('Need-by from'), { target: { value: '2026-09-16' } });
+  fireEvent.change(screen.getByLabelText('Need-by to'), { target: { value: '2026-09-16' } });
+  fireEvent.click(screen.getAllByText('Search').at(-1)!);
   await settle();
   expect(screen.getByText('50 of 50 lines')).toBeTruthy();
+  fireEvent.click(screen.getByLabelText('Search'));
+  fireEvent.change(screen.getByLabelText('Need-by from'), { target: { value: '2026-09-17' } });
+  fireEvent.click(screen.getAllByText('Search').at(-1)!);
+  expect(await screen.findByText('0 of 50 lines')).toBeTruthy();
+  fireEvent.click(screen.getByText('Clear filters'));
+  await settle();
 
   fireEvent.click(screen.getByText('Columns · 16'));
   fireEvent.click(screen.getByLabelText('TEUs'));
