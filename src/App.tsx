@@ -91,8 +91,10 @@ function App() {
             </AuthGuard>
           }
         />
+        <Route path="/" element={<Navigate to="/po" replace />} />
+        {/* Names register: hidden from the nav, reachable by URL only. */}
         <Route
-          path="/"
+          path="/names"
           element={
             <AuthGuard requireAuth={true}>
               <HomePage />

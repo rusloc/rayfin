@@ -2,10 +2,8 @@ import { NavLink } from 'react-router-dom';
 
 import { useAuth } from '@/hooks/AuthContext';
 
-const NAV = [
-  { to: '/', label: 'Names' },
-  { to: '/po', label: 'PO view' },
-];
+// The Names register stays routable at /names but is hidden from the nav.
+const NAV = [{ to: '/po', label: 'PO view' }];
 
 export function AppHeader({ title }: { title: string }) {
   const { signOut, user } = useAuth();
