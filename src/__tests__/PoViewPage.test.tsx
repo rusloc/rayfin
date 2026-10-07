@@ -4,13 +4,21 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
 import { PoViewPage } from '@/pages/PoViewPage';
 import { saveLineNote } from '@/services/poNotes';
-import { listPoRows } from '@/services/poView';
+import { getPoLine, listPoRows } from '@/services/poView';
 
 vi.mock('@/hooks/AuthContext', () => ({
   useAuth: () => ({ signOut: vi.fn(), user: { id: 'u1', email: 'user@example.com' } }),
 }));
 
 vi.mock('@/services/poView', () => ({
+  // Full record of one line (the details panel); unlisted columns are empty.
+  getPoLine: vi.fn(async (lineId: string) => ({
+    _line_id: lineId,
+    _po_no_ekporef: '12504200',
+    _supplier_name: 'INFLIGHT DIRECT INC.',
+    _po_creation_date: '2026-09-01',
+    _teus: 2.5,
+  })),
   listPoRows: vi.fn(async (columns: string[]) =>
     Array.from({ length: 50 }, (_, i) => {
       const row: Record<string, string | number | null> = {};
@@ -357,4 +365,38 @@ test('search popup closes with its × without applying the draft', async () => {
   expect(screen.queryByLabelText('PO No.')).toBeNull();
   await settle();
   expect(screen.getByText('50 of 50 lines')).toBeTruthy();
+});
+
+test('line details: doc icon opens every column of the line, as a text list or JSON', async () => {
+  render(
+    <MemoryRouter>
+      <PoViewPage />
+    </MemoryRouter>
+  );
+  await screen.findByText('50 of 50 lines');
+
+  const [icon] = await screen.findAllByLabelText('Show all columns of this line');
+  expect(icon.closest('.ag-cell')?.getAttribute('col-id')).toBe('__details');
+  fireEvent.click(icon);
+
+  const panel = await screen.findByRole('complementary', { name: 'PO line details' });
+  expect(vi.mocked(getPoLine)).toHaveBeenLastCalledWith('line-0');
+  const body = await within(panel).findByTestId('line-details');
+  expect(body.textContent).toContain('PO No. (EKPO Ref): 12504200');
+  expect(body.textContent).toContain('PO Creation Date: 01-Sep-2026');
+  expect(body.textContent).toContain('TEUs: 2.5');
+  expect(body.textContent).toMatch(/: —/); // empty columns are listed too
+
+  fireEvent.click(within(panel).getByRole('button', { name: 'JSON' }));
+  const json = JSON.parse(within(panel).getByTestId('line-details').textContent ?? '{}');
+  expect(json._po_no_ekporef).toBe('12504200');
+  expect(json._po_creation_date).toBe('2026-09-01');
+  expect(json._teus).toBe(2.5);
+  expect(json._client_name).toBeNull();
+
+  // Same slot as the notes panel: opening a note closes the details.
+  fireEvent.click(screen.getAllByText('+ note')[0]);
+  expect(await screen.findByRole('complementary', { name: 'PO line notes' })).toBeTruthy();
+  expect(screen.queryByRole('complementary', { name: 'PO line details' })).toBeNull();
+  expect(gridErrors).toEqual([]);
 });

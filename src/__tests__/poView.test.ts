@@ -14,7 +14,13 @@ import {
   MAX_PO_COLUMNS,
   PO_COLUMNS,
 } from '@/services/poColumns';
-import { PO_KEY_COLUMNS, PO_ROW_LIMIT, listPoRows } from '@/services/poView';
+import {
+  MAX_LINE_ID_LENGTH,
+  PO_KEY_COLUMNS,
+  PO_ROW_LIMIT,
+  getPoLine,
+  listPoRows,
+} from '@/services/poView';
 
 // One column of each catalog type.
 const STR = '_po_no_ekporef';
@@ -312,6 +318,154 @@ describe('poView service', () => {
       await expect(listPoRows([STR])).rejects.toThrow(
         'Could not reach the Coms report model: socket hang up'
       );
+    });
+  });
+
+  describe('getPoLine', () => {
+    const ID = '47a43c6391cce1319a404c1a612ecc01bfc500a03ac0c42df9130cd1ffa36405';
+    const ALL = PO_COLUMNS.map((c) => c.name);
+
+    describe('DAX generation', () => {
+      it('filters _PO_VIEW_ on _line_id (string literal) inside SELECTCOLUMNS, with the row limit', async () => {
+        await getPoLine(ID);
+        expect(executeQuery).toHaveBeenCalledTimes(1);
+        expect(executeQuery).toHaveBeenCalledWith({
+          query: expect.any(String),
+          resultSetRowCountLimit: PO_ROW_LIMIT,
+        });
+        expect(sentDax()).toBe(
+          [
+            'EVALUATE',
+            'SELECTCOLUMNS (',
+            '    FILTER (',
+            "        '_PO_VIEW_'",
+            `        ,'_PO_VIEW_'[_line_id] = "${ID}"`,
+            '    )',
+            ...ALL.map((n) => `    ,"${n}", '_PO_VIEW_'[${n}]`),
+            ')',
+          ].join('\n')
+        );
+      });
+
+      it('projects every catalog column exactly once, in catalog order, and none of the _tbd_ placeholders', async () => {
+        await getPoLine(ID);
+        const dax = sentDax();
+        expect(ALL).toHaveLength(238);
+        expect(dax.match(/^ {4},"/gm)).toHaveLength(ALL.length);
+        let lastIndex = -1;
+        for (const name of ALL) {
+          const pair = `,"${name}", '_PO_VIEW_'[${name}]`;
+          expect(dax.split(pair)).toHaveLength(2);
+          const at = dax.indexOf(pair);
+          expect(at).toBeGreaterThan(lastIndex);
+          lastIndex = at;
+        }
+        expect(dax).not.toContain('_tbd_');
+      });
+
+      it('escapes double quotes in the id by doubling them, so the literal cannot be closed early', async () => {
+        const evil = 'x" || TRUE () || "';
+        await getPoLine(evil);
+        expect(sentDax()).toContain(
+          `,'_PO_VIEW_'[_line_id] = "x"" || TRUE () || """`
+        );
+        // Still exactly one filter line and the catalog's alias lines; nothing injected.
+        expect(sentDax().match(/^ {8},/gm)).toHaveLength(1);
+        expect(sentDax().match(/^ {4},"/gm)).toHaveLength(ALL.length);
+      });
+    });
+
+    describe('validation', () => {
+      it('rejects an empty id without querying', async () => {
+        await expect(getPoLine('')).rejects.toThrow('Missing PO line id.');
+        expect(executeQuery).not.toHaveBeenCalled();
+      });
+
+      it('rejects an id longer than MAX_LINE_ID_LENGTH (64) without querying', async () => {
+        expect(MAX_LINE_ID_LENGTH).toBe(64);
+        await expect(getPoLine('a'.repeat(MAX_LINE_ID_LENGTH))).resolves.toBeNull();
+        executeQuery.mockClear();
+        await expect(getPoLine('a'.repeat(MAX_LINE_ID_LENGTH + 1))).rejects.toThrow(
+          'Invalid PO line id: longer than 64 characters.'
+        );
+        expect(executeQuery).not.toHaveBeenCalled();
+      });
+
+      it('rejects ids with control characters (newline, NUL, DEL) without querying', async () => {
+        for (const bad of ['a\nb', 'a\u0000b', 'a\u007fb', '\t']) {
+          await expect(getPoLine(bad)).rejects.toThrow('Invalid PO line id: contains control characters.');
+        }
+        expect(executeQuery).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('result mapping', () => {
+      it('returns null when no row matches', async () => {
+        executeQuery.mockResolvedValue(success(ALL.map((n) => `[${n}]`), []));
+        expect(await getPoLine(ID)).toBeNull();
+      });
+
+      it('returns one row with every catalog key, converted by type, in catalog order', async () => {
+        const values = ALL.map((n) => {
+          switch (PO_COLUMNS.find((c) => c.name === n)!.type) {
+            case 'string':
+              return n === LINE_ID ? ID : ` ${n} `;
+            case 'int64':
+              return '7';
+            case 'double':
+              return 1.25;
+            case 'dateTime':
+              return '2026-09-16T00:00:00';
+          }
+        });
+        executeQuery.mockResolvedValue(success(ALL.map((n) => `[${n}]`), [values]));
+        const row = await getPoLine(ID);
+        expect(row).not.toBeNull();
+        expect(Object.keys(row!)).toEqual(ALL);
+        expect(row![LINE_ID]).toBe(ID);
+        expect(row![STR]).toBe(STR);
+        expect(row![INT]).toBe(7);
+        expect(row![DBL]).toBe(1.25);
+        expect(row![DATE]).toBe('2026-09-16');
+      });
+
+      it('fills missing or blank columns with null and ignores result column order', async () => {
+        executeQuery.mockResolvedValue(
+          success([`[${INT}]`, `[${LINE_ID}]`, `[${STR}]`], [[3, ID, '   ']])
+        );
+        const row = await getPoLine(ID);
+        expect(row![INT]).toBe(3);
+        expect(row![LINE_ID]).toBe(ID);
+        expect(row![STR]).toBeNull();
+        expect(row!['_client_name']).toBeNull();
+        expect(Object.keys(row!)).toHaveLength(ALL.length);
+      });
+
+      it('takes the first row when more than one comes back', async () => {
+        executeQuery.mockResolvedValue(
+          success([`[${LINE_ID}]`, `[${INT}]`], [[ID, 1], [ID, 2]])
+        );
+        expect((await getPoLine(ID))![INT]).toBe(1);
+      });
+    });
+
+    describe('errors', () => {
+      it('maps api errors with the permission and tenant-setting hints', async () => {
+        executeQuery.mockResolvedValue(failure('api', 'PowerBIFeatureDisabled'));
+        const err = await getPoLine(ID).catch((e: Error) => e);
+        expect(err).toBeInstanceOf(Error);
+        expect((err as Error).message).toContain('PowerBIFeatureDisabled');
+        expect((err as Error).message).toContain('Build permission');
+      });
+
+      it('passes query errors through and wraps transport errors', async () => {
+        executeQuery.mockResolvedValue(failure('query', 'boom query'));
+        await expect(getPoLine(ID)).rejects.toThrow('boom query');
+        executeQuery.mockRejectedValue(new Error('socket hang up'));
+        await expect(getPoLine(ID)).rejects.toThrow(
+          'Could not reach the Coms report model: socket hang up'
+        );
+      });
     });
   });
 });

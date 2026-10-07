@@ -22,6 +22,7 @@ import { AgGridReact } from 'ag-grid-react';
 import { AppHeader } from '@/components/AppHeader';
 import { ColumnPicker } from '@/components/ColumnPicker';
 import { JourneyPanel, RouteIcon } from '@/components/JourneyPanel';
+import { DocIcon, LineDetailsPanel } from '@/components/LineDetailsPanel';
 import { ChartIcon, LateChart } from '@/components/LateChart';
 import { LATE_CHART_DATE_COLUMN } from '@/components/lateCounts';
 import { NotePanel } from '@/components/NotePanel';
@@ -36,7 +37,7 @@ import {
 } from '@/services/poColumns';
 import { listPoNotes, saveLineNote, type PoLineRef, type PoNote } from '@/services/poNotes';
 import { isLateLine, lateCutoff } from '@/services/poRules';
-import { listPoRows, type PoRow } from '@/services/poView';
+import { getPoLine, listPoRows, type PoRow } from '@/services/poView';
 
 ModuleRegistry.registerModules([
   ClientSideRowModelModule,
@@ -177,6 +178,7 @@ interface NotesContext {
   noteByLine: Map<string, PoNote>;
   open: (row: PoRow) => void;
   openJourney: (row: PoRow) => void;
+  openDetails: (row: PoRow) => void;
   toggleFlag: (row: PoRow) => void;
 }
 
@@ -233,8 +235,23 @@ function JourneyCell({ data, context }: NoteCellProps) {
   );
 }
 
+function DetailsCell({ data, context }: NoteCellProps) {
+  if (!data) return null;
+  return (
+    <button
+      onClick={() => context.openDetails(data)}
+      aria-label="Show all columns of this line"
+      title="All columns"
+      className="flex h-full items-center text-gray-400 hover:text-blue-600"
+    >
+      <DocIcon />
+    </button>
+  );
+}
+
 const NOTE_COLUMNS: ColDef<PoRow>[] = [
   { colId: '__journey', headerName: '', cellRenderer: JourneyCell, width: 48, pinned: 'left', sortable: false, resizable: false },
+  { colId: '__details', headerName: '', cellRenderer: DetailsCell, width: 48, pinned: 'left', sortable: false, resizable: false },
   { colId: '__flag', headerName: '', cellRenderer: FlagCell, width: 56, pinned: 'left', sortable: false, resizable: false },
   { colId: '__notes', headerName: 'Notes', cellRenderer: NotesCell, width: 90, pinned: 'left', sortable: false },
 ];
@@ -260,6 +277,7 @@ export function PoViewPage() {
   const [notes, setNotes] = useState<PoNote[]>([]);
   const [openRow, setOpenRow] = useState<PoRow | null>(null);
   const [journeyRow, setJourneyRow] = useState<PoRow | null>(null);
+  const [detailsRow, setDetailsRow] = useState<PoRow | null>(null);
   const [search, setSearch] = useState<PoSearch>(EMPTY_SEARCH);
 
   useEffect(() => {
@@ -295,10 +313,18 @@ export function PoViewPage() {
 
   // AG Grid reads `context` once (@initial), so keep one object and mutate it,
   // then repaint the note cells.
+  // Notes and line details share the right-hand slot: opening one closes the other.
   const context = useRef<NotesContext>({
     noteByLine,
-    open: setOpenRow,
+    open: (row) => {
+      setDetailsRow(null);
+      setOpenRow(row);
+    },
     openJourney: setJourneyRow,
+    openDetails: (row) => {
+      setOpenRow(null);
+      setDetailsRow(row);
+    },
     toggleFlag,
   }).current;
   useEffect(() => {
@@ -483,6 +509,17 @@ export function PoViewPage() {
             setChartOpen(false);
             setSearch({ ...EMPTY_SEARCH, late: 'yes', createdMonth: month });
           }}
+        />
+      )}
+
+      {detailsRow && (
+        <LineDetailsPanel
+          key={String(detailsRow._line_id)}
+          lineId={String(detailsRow._line_id)}
+          title={`PO ${text(detailsRow._po_no_ekporef) ?? '—'} · line ${text(detailsRow._line_no) ?? '—'}`}
+          subtitle={text(detailsRow._supplier_name)}
+          load={getPoLine}
+          onClose={() => setDetailsRow(null)}
         />
       )}
 
