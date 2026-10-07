@@ -3,13 +3,13 @@
 # Verified against @microsoft/rayfin-cli 1.36.2 (`npx rayfin login --help`, `npx rayfin up --help`).
 # Setup checklist (Entra app, workspace role, tenant setting, secrets): docs/ADD/features/ci-cd-service-principal.md
 #
-# - push to main      -> non-destructive deploy (`rayfin up --yes`; destructive schema ops are refused)
-# - Run workflow (UI) -> same, plus an optional `force` checkbox that adds `--force` (DATA LOSS possible)
+# DORMANT (USER decision 2026-10-07): deploys run locally with `npx rayfin up`; GitHub is backup only.
+# No push trigger, so pushes to main never deploy (or fail on the missing secrets).
+# - Run workflow (UI) -> non-destructive deploy (`rayfin up --yes`), plus an optional `force` checkbox
+#   that adds `--force` (DATA LOSS possible). Needs the secrets from the setup checklist first.
 name: Deploy to Fabric
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       force:
